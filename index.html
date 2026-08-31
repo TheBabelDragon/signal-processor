@@ -60,16 +60,20 @@
       <input type="range" id="musicSlider" min="-60" max="6" step="0.5" value="0">
     </div>
     <div class="level-row">
-      <div class="row" style="display:flex;justify-content:space-between;"><label style="font-size:12px;color:var(--text-dim);" id="toneLabel">TONE</label><span class="value" style="font-family:var(--mono);font-size:13px;color:var(--phosphor);" id="toneVal">-24.0 dB</span></div>
-      <input type="range" id="toneSlider" min="-60" max="6" step="0.5" value="-24">
+      <div class="row" style="display:flex;justify-content:space-between;"><label style="font-size:12px;color:var(--text-dim);" id="toneLabel">TONE</label><span class="value" style="font-family:var(--mono);font-size:13px;color:var(--phosphor);" id="toneVal">-16.0 dB</span></div>
+      <input type="range" id="toneSlider" min="-60" max="6" step="0.5" value="-16">
+    </div>
+    <div class="level-row">
+      <div class="row" style="display:flex;justify-content:space-between;"><label style="font-size:12px;color:var(--text-dim);">MASTER</label><span class="value" style="font-family:var(--mono);font-size:13px;color:var(--phosphor);" id="masterVal">0.0 dB</span></div>
+      <input type="range" id="masterSlider" min="-24" max="12" step="0.5" value="0">
     </div>
 
     <div class="transport">
-      <button type="button" class="big primary" id="playBtn" disabled>▶ PLAY</button>
-      <button type="button" class="big" id="exportBtn" disabled>EXPORT</button>
+      <button type="button" class="big primary" id="playBtn">▶ PLAY</button>
+      <button type="button" class="big" id="exportBtn">EXPORT</button>
     </div>
     <canvas id="meter" width="440" height="34"></canvas>
-    <div class="status" id="status">load an audio file to begin</div>
+    <div class="status" id="status">headphones · play starts a tone bed if no file is loaded</div>
   </div>
 
   <details id="neuro" open>
@@ -109,9 +113,9 @@
       <div class="field"><label>Echo SSE</label><input type="text" id="nfEchoUrl" value="http://127.0.0.1:8765/events" style="flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--line);color:var(--phosphor);font-family:var(--mono);font-size:12px;border-radius:6px;padding:6px 8px;"></div>
       <div class="field"><label>Bed</label>
         <select id="nfBed">
+          <option value="silence" selected>silence + tone</option>
           <option value="pink">pink noise</option>
           <option value="brown">brown noise</option>
-          <option value="silence">silence + tone</option>
           <option value="file">loaded file</option>
         </select>
       </div>
@@ -165,5 +169,6 @@
 <script src="beds.js"></script>
 <script src="bridge.js"></script>
 <script src="neuro.js"></script>
+<script src="hear.js"></script>
 </body>
 </html>
