@@ -1,12 +1,20 @@
 "use strict";
 
 const NF_BANDS = {
-  delta:  { hz: 2.5,  label: 'delta 2.5',  hint: 'sleep / deep' },
-  theta:  { hz: 6.0,  label: 'theta 6',    hint: 'idle / hypnagogic' },
-  alpha:  { hz: 10.0, label: 'alpha 10',   hint: 'eyes-closed rest' },
-  smr:    { hz: 13.5, label: 'smr 13.5',   hint: 'quiet body, alert' },
+  delta: { hz: 2.5,  label: 'delta 2.5',  hint: 'sleep / deep' },
+  theta: { hz: 6.0,  label: 'theta 6',    hint: 'idle / hypnagogic' },
+  alpha: { hz: 10.0, label: 'alpha 10',   hint: 'eyes-closed rest' },
+  smr:   { hz: 13.5, label: 'smr 13.5',   hint: 'quiet body, alert' },
   beta:  { hz: 18.0, label: 'beta 18',    hint: 'active focus' },
   gamma: { hz: 40.0, label: 'gamma 40',   hint: 'binding / high' },
+};
+
+const NF_PROTOCOLS = {
+  alpha_up:    { band: 'alpha', polarity: 1,  hint: 'reward alpha hold' },
+  theta_down:  { band: 'theta', polarity: -1, hint: 'inhibit theta wander' },
+  smr:         { band: 'smr',   polarity: 1,  hint: 'SMR uptrain' },
+  alpha_theta: { band: 'alpha', polarity: 1,  hint: 'start theta, reward alpha' },
+  beta_focus:  { band: 'beta',  polarity: 1,  hint: 'active focus hold' },
 };
 
 const nf = {
@@ -22,6 +30,8 @@ const nf = {
   analyser: null,
   baseline: 0.02,
   lastTap: 0,
+  echo: null,
+  log: [],
 };
 
 function nfSetStatus(msg, kind) {
@@ -36,13 +46,29 @@ function applyBandToUI(key) {
   if (!band) return;
   nf.band = key;
   document.querySelectorAll('#bandChips .chip').forEach(c => c.classList.toggle('active', c.dataset.band === key));
-  const beat = document.getElementById('beatSlider');
-  const beatVal = document.getElementById('beatVal');
-  beat.value = band.hz;
-  beatVal.textContent = band.hz.toFixed(2);
+  document.getElementById('beatSlider').value = band.hz;
+  document.getElementById('beatVal').textContent = band.hz.toFixed(2);
   document.getElementById('beatAutoToggle').checked = false;
   document.getElementById('beatRamp').classList.remove('show');
   nfSetStatus(band.label + ' \u2014 ' + band.hint);
+}
+
+function applyProtocol(name) {
+  const p = NF_PROTOCOLS[name];
+  if (!p) return;
+  applyBandToUI(p.band);
+  const pol = document.getElementById('nfPolarity');
+  if (pol) pol.value = String(p.polarity);
+  if (name === 'alpha_theta') {
+    document.getElementById('beatAutoToggle').checked = true;
+    document.getElementById('beatRamp').classList.add('show');
+    document.getElementById('beatFrom').value = '6';
+    document.getElementById('beatTo').value = '10';
+    const minutes = parseFloat(document.getElementById('nfMinutes').value) || 10;
+    document.getElementById('beatDur').value = String(Math.round(minutes * 60 * 0.4));
+    document.getElementById('beatCurve').value = 'smooth';
+  }
+  nfSetStatus(name.replace('_', ' ') + ' \u2014 ' + p.hint);
 }
 
 function renderBandChips() {
@@ -93,6 +119,11 @@ function stopMic() {
   nf.analyser = null;
 }
 
+function stopEcho() {
+  if (nf.echo && nf.echo.close) nf.echo.close();
+  nf.echo = null;
+}
+
 function readMicStillness() {
   if (!nf.analyser) return nf.reward;
   const data = new Uint8Array(nf.analyser.fftSize);
@@ -109,6 +140,15 @@ function readMicStillness() {
   return nf.reward * 0.85 + raw * 0.15;
 }
 
+function polarity() {
+  const el = document.getElementById('nfPolarity');
+  return el && el.value === '-1' ? -1 : 1;
+}
+
+function shapedReward(raw) {
+  return polarity() < 0 ? (1 - raw) : raw;
+}
+
 function tickSession() {
   if (!nf.running) return;
   nf.raf = requestAnimationFrame(tickSession);
@@ -118,7 +158,7 @@ function tickSession() {
   document.getElementById('nfClock').textContent = m + ':' + String(s).padStart(2, '0');
 
   const sensor = document.getElementById('nfSensor').value;
-  if (sensor === 'mic') nf.reward = readMicStillness();
+  if (sensor === 'mic') nf.reward = shapedReward(readMicStillness());
   else if (sensor === 'manual') {
     const age = (performance.now() - nf.lastTap) / 1000;
     nf.reward = Math.max(0, nf.reward * 0.992 - age * 0.0004);
@@ -126,20 +166,21 @@ function tickSession() {
 
   document.getElementById('nfRewardVal').textContent = (nf.reward * 100).toFixed(0) + '%';
   drawReward();
-
   nf.score += nf.reward;
   nf.samples += 1;
+  if (nf.samples % 30 === 0) {
+    nf.log.push({ t: +elapsed.toFixed(2), reward: +nf.reward.toFixed(3), band: nf.band });
+  }
 
   const protocol = document.getElementById('nfProtocol').value;
   if (protocol === 'reward' && playing) {
     const target = NF_BANDS[nf.band].hz;
     const recipe = readRecipeFromUI();
-    const drift = (1 - nf.reward) * 2;
-    liveSetBeat(playing, recipe, target + drift);
+    liveSetBeat(playing, recipe, target + (1 - nf.reward) * 2);
     liveSetToneDb(playing, recipe, recipe.tone_db + nf.reward * 4);
   }
 
-  if (elapsed >= nf.duration) stopSession('session complete \u00b7 avg reward ' + ((nf.score / Math.max(1, nf.samples)) * 100).toFixed(0) + '%');
+  if (elapsed >= nf.duration) stopSession('session complete \u00b7 avg ' + ((nf.score / Math.max(1, nf.samples)) * 100).toFixed(0) + '%');
 }
 
 async function startSession() {
@@ -167,7 +208,13 @@ async function startSession() {
   const sensor = document.getElementById('nfSensor').value;
   if (sensor === 'mic') {
     try { await startMic(); }
-    catch (err) { nfSetStatus('mic denied \u2014 use manual tap or entrain', 'err'); return; }
+    catch (err) { nfSetStatus('mic denied \u2014 use tap or echo stream', 'err'); return; }
+  }
+  if (sensor === 'external') {
+    const url = (document.getElementById('nfEchoUrl').value || '').trim() || 'http://127.0.0.1:8765/events';
+    nf.echo = connectEchoStream(url, (scored) => {
+      nf.reward = shapedReward(scored.score);
+    }, nfSetStatus);
   }
 
   document.getElementById('fadeIn').value = Math.min(20, Math.max(4, minutes));
@@ -190,6 +237,7 @@ async function startSession() {
   nf.reward = sensor === 'manual' ? 0.4 : 0.5;
   nf.score = 0;
   nf.samples = 0;
+  nf.log = [];
   document.getElementById('nfStartBtn').textContent = '\u25a0 STOP SESSION';
   document.getElementById('nfStartBtn').classList.add('playing');
   nfSetStatus('session live \u00b7 ' + NF_BANDS[nf.band].label + ' \u00b7 ' + sensor);
@@ -201,23 +249,46 @@ function stopSession(msg) {
   if (nf.raf) cancelAnimationFrame(nf.raf);
   nf.raf = 0;
   stopMic();
+  stopEcho();
   document.getElementById('nfStartBtn').textContent = '\u25b6 SESSION';
   document.getElementById('nfStartBtn').classList.remove('playing');
   if (playing) stopPlayback();
   nfSetStatus(msg || 'session stopped');
 }
 
+function exportSessionLog() {
+  const blob = new Blob([JSON.stringify({
+    band: nf.band,
+    duration: nf.duration,
+    avg: nf.samples ? nf.score / nf.samples : 0,
+    samples: nf.log,
+  }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'nf-session.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 window.SignalObservation = {
   push(score) {
     const n = Number(score);
     if (!Number.isFinite(n)) return;
-    nf.reward = Math.max(0, Math.min(1, n));
+    nf.reward = shapedReward(Math.max(0, Math.min(1, n)));
+  },
+  observe(payload) {
+    const scored = ingestObservation(payload);
+    if (scored) nf.reward = shapedReward(scored.score);
   }
 };
 window.addEventListener('signal-observation', (e) => {
-  if (e && e.detail && Number.isFinite(Number(e.detail.score))) {
-    nf.reward = Math.max(0, Math.min(1, Number(e.detail.score)));
+  if (!e || !e.detail) return;
+  if (Number.isFinite(Number(e.detail.score)) && !e.detail.field_regions) {
+    nf.reward = shapedReward(Number(e.detail.score));
+    return;
   }
+  const scored = ingestObservation(e.detail);
+  if (scored) nf.reward = shapedReward(scored.score);
 });
 
 document.getElementById('nfRewardBtn').addEventListener('click', () => {
@@ -227,6 +298,8 @@ document.getElementById('nfRewardBtn').addEventListener('click', () => {
 document.getElementById('nfStartBtn').addEventListener('click', () => {
   startSession().catch(err => nfSetStatus(err.message || String(err), 'err'));
 });
+document.getElementById('nfLogBtn').addEventListener('click', exportSessionLog);
+document.getElementById('nfStack').addEventListener('change', (e) => applyProtocol(e.target.value));
 
 renderBandChips();
 applyBandToUI('alpha');
