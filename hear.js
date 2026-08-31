@@ -1,18 +1,13 @@
 "use strict";
 
 (function () {
-  const playBtn = document.getElementById('playBtn');
-  const exportBtn = document.getElementById('exportBtn');
-  if (playBtn) playBtn.disabled = false;
-  if (exportBtn) exportBtn.disabled = false;
-
-  window.unlockAudio = async function unlockAudio() {
+  async function unlockAudio() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     return audioCtx;
-  };
+  }
 
-  window.ensureBed = async function ensureBed(seconds) {
+  async function ensureBed(seconds) {
     await unlockAudio();
     if (sourceBuffer) return sourceBuffer;
     const kindEl = document.getElementById('nfBed');
@@ -24,7 +19,43 @@
     if (name) name.textContent = fileLabel;
     if (dur) dur.textContent = formatTime(sourceBuffer.duration) + ' \u00b7 generated';
     return sourceBuffer;
-  };
+  }
+
+  const playBtn = document.getElementById('playBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  if (playBtn) playBtn.disabled = false;
+  if (exportBtn) exportBtn.disabled = false;
+
+  if (playBtn) {
+    const fresh = playBtn.cloneNode(true);
+    playBtn.parentNode.replaceChild(fresh, playBtn);
+    fresh.disabled = false;
+    fresh.addEventListener('click', async function () {
+      if (playing) { stopPlayback(); return; }
+      try {
+        await ensureBed(600);
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        const recipe = readRecipeFromUI();
+        if (document.getElementById('masterSlider')) {
+          recipe.master_db = parseFloat(document.getElementById('masterSlider').value) || 0;
+        }
+        setStatus('building graph\u2026');
+        const nodes = await buildGraph(audioCtx, sourceBuffer, recipe);
+        meterAnalyser = audioCtx.createAnalyser();
+        meterAnalyser.fftSize = 256;
+        nodes.limiter.connect(meterAnalyser);
+        playing = nodes;
+        fresh.textContent = '\u25a0 STOP';
+        fresh.classList.add('playing');
+        setStatus('playing ' + fileLabel + ' \u00b7 headphones');
+        startMeter();
+        nodes.src.onended = function () { if (playing === nodes) stopPlayback(); };
+      } catch (err) {
+        console.error(err);
+        setStatus('playback failed: ' + (err.message || err), 'err');
+      }
+    });
+  }
 
   const master = document.getElementById('masterSlider');
   const masterVal = document.getElementById('masterVal');
@@ -45,4 +76,6 @@
       if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
     }, { passive: true });
   });
+
+  setStatus('headphones \u00b7 play starts a tone bed if no file is loaded');
 })();
