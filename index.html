@@ -76,10 +76,26 @@
     <summary>Neurofeedback</summary>
     <div class="adv-body">
       <div class="chips" id="bandChips"></div>
-      <div class="field"><label>Protocol</label>
+      <div class="field"><label>Stack</label>
+        <select id="nfStack">
+          <option value="">custom band</option>
+          <option value="alpha_up">alpha up</option>
+          <option value="theta_down">theta down</option>
+          <option value="smr">SMR</option>
+          <option value="alpha_theta">alpha-theta</option>
+          <option value="beta_focus">beta focus</option>
+        </select>
+      </div>
+      <div class="field"><label>Loop</label>
         <select id="nfProtocol">
           <option value="entrain">entrain (open loop)</option>
           <option value="reward">reward loop</option>
+        </select>
+      </div>
+      <div class="field"><label>Polarity</label>
+        <select id="nfPolarity">
+          <option value="1">reward high</option>
+          <option value="-1">inhibit high</option>
         </select>
       </div>
       <div class="field"><label>Sensor</label>
@@ -87,9 +103,10 @@
           <option value="none">none</option>
           <option value="manual">manual tap</option>
           <option value="mic">mic stillness</option>
-          <option value="external">external observation</option>
+          <option value="external">echo / field obs</option>
         </select>
       </div>
+      <div class="field"><label>Echo SSE</label><input type="text" id="nfEchoUrl" value="http://127.0.0.1:8765/events" style="flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--line);color:var(--phosphor);font-family:var(--mono);font-size:12px;border-radius:6px;padding:6px 8px;"></div>
       <div class="field"><label>Bed</label>
         <select id="nfBed">
           <option value="pink">pink noise</option>
@@ -111,7 +128,10 @@
         <button type="button" class="big primary" id="nfStartBtn">▶ SESSION</button>
         <button type="button" class="big" id="nfRewardBtn">REWARD TAP</button>
       </div>
-      <div class="status" id="nfStatus">bands are targets. mic is stillness, not EEG.</div>
+      <div class="transport" style="margin-top:8px;">
+        <button type="button" class="big" id="nfLogBtn">↓ SESSION LOG</button>
+      </div>
+      <div class="status" id="nfStatus">echo feeds reward. it does not fire the array.</div>
     </div>
   </details>
 
@@ -143,6 +163,7 @@
 <script src="engine.js"></script>
 <script src="ui.js"></script>
 <script src="beds.js"></script>
+<script src="bridge.js"></script>
 <script src="neuro.js"></script>
 </body>
 </html>
