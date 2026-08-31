@@ -1,0 +1,8 @@
+.DS_Store
+*.wav
+*.mp3
+*.m4a
+*.flac
+node_modules/
+.idea/
+.vscode/
