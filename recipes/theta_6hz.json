@@ -1,0 +1,11 @@
+{
+  "name": "theta_6hz",
+  "mode": "binaural",
+  "carrier_hz": 200.0,
+  "beat_hz": 6.0,
+  "tone_db": -22.0,
+  "music_db": 0.0,
+  "fade_in": 20.0,
+  "fade_out": 40.0,
+  "waveform": "sine"
+}

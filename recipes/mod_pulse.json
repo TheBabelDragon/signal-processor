@@ -1,0 +1,11 @@
+{
+  "name": "mod_pulse",
+  "mode": "modulation",
+  "pulse_hz": 8.0,
+  "modulation_depth": 0.6,
+  "duty": 0.5,
+  "shape": "smooth_pulse",
+  "music_db": 0.0,
+  "fade_in": 8.0,
+  "fade_out": 12.0
+}

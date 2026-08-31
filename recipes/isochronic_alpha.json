@@ -1,0 +1,11 @@
+{
+  "name": "isochronic_alpha",
+  "mode": "isochronic",
+  "carrier_hz": 200.0,
+  "pulse_hz": 10.0,
+  "depth": 1.0,
+  "duty": 0.5,
+  "shape": "smooth_pulse",
+  "tone_db": -20.0,
+  "music_db": 0.0
+}
