@@ -72,6 +72,49 @@
     <div class="status" id="status">load an audio file to begin</div>
   </div>
 
+  <details id="neuro" open>
+    <summary>Neurofeedback</summary>
+    <div class="adv-body">
+      <div class="chips" id="bandChips"></div>
+      <div class="field"><label>Protocol</label>
+        <select id="nfProtocol">
+          <option value="entrain">entrain (open loop)</option>
+          <option value="reward">reward loop</option>
+        </select>
+      </div>
+      <div class="field"><label>Sensor</label>
+        <select id="nfSensor">
+          <option value="none">none</option>
+          <option value="manual">manual tap</option>
+          <option value="mic">mic stillness</option>
+          <option value="external">external observation</option>
+        </select>
+      </div>
+      <div class="field"><label>Bed</label>
+        <select id="nfBed">
+          <option value="pink">pink noise</option>
+          <option value="brown">brown noise</option>
+          <option value="silence">silence + tone</option>
+          <option value="file">loaded file</option>
+        </select>
+      </div>
+      <div class="field"><label>Session (min)</label><input type="number" id="nfMinutes" min="1" max="90" step="1" value="10"></div>
+      <div class="readout" style="margin-bottom:10px;">
+        <div class="row"><label>REWARD</label><span class="value" id="nfRewardVal">—</span></div>
+        <canvas id="nfRewardMeter" width="440" height="18"></canvas>
+      </div>
+      <div class="row" style="display:flex;justify-content:space-between;margin-bottom:10px;">
+        <label style="font-size:12px;color:var(--text-dim);">SESSION</label>
+        <span class="value" style="font-family:var(--mono);font-size:15px;color:var(--phosphor);" id="nfClock">0:00</span>
+      </div>
+      <div class="transport">
+        <button type="button" class="big primary" id="nfStartBtn">▶ SESSION</button>
+        <button type="button" class="big" id="nfRewardBtn">REWARD TAP</button>
+      </div>
+      <div class="status" id="nfStatus">bands are targets. mic is stillness, not EEG.</div>
+    </div>
+  </details>
+
   <details id="advanced">
     <summary>Advanced</summary>
     <div class="adv-body">
@@ -99,5 +142,7 @@
 </div>
 <script src="engine.js"></script>
 <script src="ui.js"></script>
+<script src="beds.js"></script>
+<script src="neuro.js"></script>
 </body>
 </html>
