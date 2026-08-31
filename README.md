@@ -1,45 +1,41 @@
 # SIGNAL · PROCESSOR
 
-Browser app: binaural / isochronic / modulation processor plus a session loop for band-targeted audio work.
+Binaural / isochronic / modulation processor plus a session loop.
 
-Repo: https://github.com/TheBabelDragon/signal-processor
+https://github.com/TheBabelDragon/signal-processor
 
-Live (enable Pages once): https://thebabeldragon.github.io/signal-processor/
-
-## Run locally
+## Run
 
 ```bash
 python3 -m http.server 8080
 ```
 
-Open `http://localhost:8080`.
-
-## GitHub Pages
-
-Settings → Pages → Source → **GitHub Actions**. One click. Until that is on, the deploy workflow fails.
+Pages: Settings → Pages → Source → GitHub Actions. Until that click, deploys fail.
 
 ## Neurofeedback
 
-This is **not EEG**. Binaural/isochronic audio is open-loop entrainment. The session panel adds a reward loop on top:
+Not EEG. Not a medical device.
 
-- **entrain** — lock beat/pulse to delta / theta / alpha / SMR / beta / gamma
-- **reward loop** — high reward holds the target Hz; low reward drifts it ~2 Hz off and drops tone level
-- **sensors**
-  - `none` — open loop
-  - `manual tap` — you are the classifier
-  - `mic stillness` — quiet room / still body raises reward (biofeedback proxy)
-  - `external` — push a 0..1 score from a real headset / MetaField node
+Stacks: alpha up, theta down, SMR, alpha-theta, beta focus.
+Loop: entrain (open) or reward (hold target when score is high).
+Polarity: reward high or inhibit high.
+Sensors: none, manual tap, mic stillness, Echo / FieldObservation.
 
-External hook:
+## Echo Grid — perchance not the array
 
-```js
-window.SignalObservation.push(0.8);
-window.dispatchEvent(new CustomEvent('signal-observation', { detail: { score: 0.8 } }));
+This tab does **not** drive ultrasonic emitters. Echo already has `--body --drive`.
+
+It *can* ingest Echo `FieldObservation` as the reward signal. See [BRIDGE.md](BRIDGE.md).
+
+```bash
+# Echo repo
+python visualization/dashboard.py --csi --metafield-log /tmp/metafield/echo.jsonl
+
+# this repo
+python tools/echo_bridge.py --file /tmp/metafield/echo.jsonl
 ```
 
-Beds: pink / brown / silence so you do not need a music file. Headphones on for binaural.
-
-Not a medical device.
+Same JSON works for optical-body-s3.
 
 ## License
 
