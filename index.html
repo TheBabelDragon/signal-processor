@@ -1,1 +1,102 @@
-<placeholder>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Signal — Precision Music Processor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>SIGNAL<span>·</span>PROCESSOR</h1>
+    <div class="sub" id="engineState">idle</div>
+  </header>
+
+  <div class="panel">
+    <div id="dropzone">
+      <div class="prompt">drop audio here, or tap to browse</div>
+      <div class="filename" id="fileName"></div>
+      <div class="duration" id="fileDuration"></div>
+    </div>
+    <input type="file" id="fileInput" accept="audio/*">
+  </div>
+
+  <div class="chips" id="presetChips"></div>
+
+  <div class="panel">
+    <div class="segmented" id="modeSeg">
+      <button type="button" data-mode="binaural" class="active">BINAURAL</button>
+      <button type="button" data-mode="isochronic">ISOCHRONIC</button>
+      <button type="button" data-mode="modulation">MODULATION</button>
+    </div>
+
+    <div class="readout" id="carrierField">
+      <div class="row"><label>CARRIER</label><span class="value"><span id="carrierVal">200.00</span> Hz</span></div>
+      <input type="range" id="carrierSlider" min="20" max="1000" step="0.01" value="200">
+      <div class="automation-toggle"><input type="checkbox" id="carrierAutoToggle"> automate carrier over time</div>
+      <div class="ramp-fields" id="carrierRamp">
+        <input type="number" id="carrierFrom" placeholder="from Hz" value="180" step="0.01">
+        <input type="number" id="carrierTo" placeholder="to Hz" value="220" step="0.01">
+        <input type="number" id="carrierDur" placeholder="seconds" value="300" step="1">
+        <select id="carrierCurve"><option value="linear">linear</option><option value="smooth" selected>smooth</option></select>
+      </div>
+    </div>
+
+    <div class="readout" id="beatField">
+      <div class="row"><label id="beatLabel">BEAT</label><span class="value"><span id="beatVal">10.00</span> Hz</span></div>
+      <input type="range" id="beatSlider" min="0.5" max="40" step="0.01" value="10">
+      <div class="automation-toggle"><input type="checkbox" id="beatAutoToggle"> automate over time</div>
+      <div class="ramp-fields" id="beatRamp">
+        <input type="number" id="beatFrom" placeholder="from Hz" value="6" step="0.01">
+        <input type="number" id="beatTo" placeholder="to Hz" value="10" step="0.01">
+        <input type="number" id="beatDur" placeholder="seconds" value="300" step="1">
+        <select id="beatCurve"><option value="linear">linear</option><option value="smooth" selected>smooth</option></select>
+      </div>
+    </div>
+
+    <div class="level-row">
+      <div class="row" style="display:flex;justify-content:space-between;"><label style="font-size:12px;color:var(--text-dim);">MUSIC</label><span class="value" style="font-family:var(--mono);font-size:13px;color:var(--phosphor);" id="musicVal">0.0 dB</span></div>
+      <input type="range" id="musicSlider" min="-60" max="6" step="0.5" value="0">
+    </div>
+    <div class="level-row">
+      <div class="row" style="display:flex;justify-content:space-between;"><label style="font-size:12px;color:var(--text-dim);" id="toneLabel">TONE</label><span class="value" style="font-family:var(--mono);font-size:13px;color:var(--phosphor);" id="toneVal">-24.0 dB</span></div>
+      <input type="range" id="toneSlider" min="-60" max="6" step="0.5" value="-24">
+    </div>
+
+    <div class="transport">
+      <button type="button" class="big primary" id="playBtn" disabled>▶ PLAY</button>
+      <button type="button" class="big" id="exportBtn" disabled>EXPORT</button>
+    </div>
+    <canvas id="meter" width="440" height="34"></canvas>
+    <div class="status" id="status">load an audio file to begin</div>
+  </div>
+
+  <details id="advanced">
+    <summary>Advanced</summary>
+    <div class="adv-body">
+      <div class="field"><label>Waveform</label>
+        <select id="waveform"><option>sine</option><option>square</option><option>sawtooth</option><option>triangle</option></select>
+      </div>
+      <div class="field" id="shapeField"><label>Envelope shape</label>
+        <select id="shape"><option>square</option><option>sine</option><option>triangle</option><option>smooth_pulse</option></select>
+      </div>
+      <div class="field" id="dutyField"><label>Duty cycle</label><input type="number" id="duty" min="0.05" max="0.95" step="0.05" value="0.5"></div>
+      <div class="field" id="attackField"><label>Attack</label><input type="number" id="attack" min="0" max="0.5" step="0.01" value="0.1"></div>
+      <div class="field" id="releaseField"><label>Release</label><input type="number" id="release" min="0" max="0.5" step="0.01" value="0.1"></div>
+      <div class="field" id="depthField"><label>Depth</label><input type="number" id="depth" min="0" max="1" step="0.05" value="1.0"></div>
+      <div class="field" id="invertField"><label>Invert stereo</label><input type="checkbox" id="invertStereo"></div>
+      <div class="field"><label>Fade in (s)</label><input type="number" id="fadeIn" min="0" step="1" value="0"></div>
+      <div class="field"><label>Fade out (s)</label><input type="number" id="fadeOut" min="0" step="1" value="0"></div>
+      <div class="field"><label>Master (dB)</label><input type="number" id="masterDb" step="0.5" value="0"></div>
+      <div class="field"><label>Limiter ceiling (dB)</label><input type="number" id="ceilingDb" step="0.5" value="-0.3"></div>
+      <a class="recipe-link" id="downloadRecipe" href="#">↓ export this recipe as JSON</a>
+      &nbsp;·&nbsp;
+      <label class="recipe-link" for="recipeFile" style="cursor:pointer;">↑ load recipe JSON</label>
+      <input type="file" id="recipeFile" accept="application/json" style="display:none;">
+    </div>
+  </details>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
