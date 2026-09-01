@@ -78,5 +78,15 @@
     }, { passive: true });
   });
 
+  if (typeof stopPlayback === 'function' && !stopPlayback.__producerWrapped) {
+    const inner = stopPlayback;
+    function wrappedStop() {
+      if (window.SignalProducer) SignalProducer.noteStop(meterAnalyser);
+      return inner.apply(this, arguments);
+    }
+    wrappedStop.__producerWrapped = true;
+    stopPlayback = wrappedStop;
+  }
+
   setStatus('headphones \u00b7 play starts a tone bed if no file is loaded');
 })();
