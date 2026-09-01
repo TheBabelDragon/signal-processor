@@ -45,6 +45,7 @@
         meterAnalyser.fftSize = 256;
         nodes.limiter.connect(meterAnalyser);
         playing = nodes;
+        if (window.SignalProducer) SignalProducer.noteStart(recipe.mode, recipe);
         fresh.textContent = '\u25a0 STOP';
         fresh.classList.add('playing');
         setStatus('playing ' + fileLabel + ' \u00b7 headphones');
