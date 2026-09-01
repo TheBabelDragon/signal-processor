@@ -28,6 +28,7 @@
     <div class="segmented" id="modeSeg">
       <button type="button" data-mode="binaural" class="active">BINAURAL</button>
       <button type="button" data-mode="isochronic">ISOCHRONIC</button>
+      <button type="button" data-mode="isochronic4">ISO×4</button>
       <button type="button" data-mode="modulation">MODULATION</button>
     </div>
 
@@ -40,6 +41,16 @@
         <input type="number" id="carrierTo" placeholder="to Hz" value="220" step="0.01">
         <input type="number" id="carrierDur" placeholder="seconds" value="300" step="1">
         <select id="carrierCurve"><option value="linear">linear</option><option value="smooth" selected>smooth</option></select>
+      </div>
+    </div>
+
+    <div class="readout" id="fourToneField" style="display:none;">
+      <div class="row"><label>FOUR TONES</label><span class="value" id="fourToneVal">180 · 225 · 270 · 360</span></div>
+      <div class="ramp-fields show" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;">
+        <input type="number" id="toneA" value="180" step="0.1" min="20" max="2000" title="voice 1">
+        <input type="number" id="toneB" value="225" step="0.1" min="20" max="2000" title="voice 2">
+        <input type="number" id="toneC" value="270" step="0.1" min="20" max="2000" title="voice 3">
+        <input type="number" id="toneD" value="360" step="0.1" min="20" max="2000" title="voice 4">
       </div>
     </div>
 
@@ -165,8 +176,10 @@
   </details>
 </div>
 <script src="engine.js"></script>
+<script src="iso4.js"></script>
 <script src="producer.js"></script>
 <script src="ui.js"></script>
+<script src="ui-iso4.js"></script>
 <script src="beds.js"></script>
 <script src="bridge.js"></script>
 <script src="neuro.js"></script>
