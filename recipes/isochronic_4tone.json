@@ -1,0 +1,13 @@
+{
+  "name": "isochronic_4tone",
+  "mode": "isochronic4",
+  "carrier_hz": 180,
+  "carriers": [180, 225, 270, 360],
+  "pulse_hz": 10,
+  "depth": 1,
+  "duty": 0.5,
+  "shape": "smooth_pulse",
+  "tone_db": -18,
+  "music_db": 0,
+  "note": "Four carriers 4:5:6:8 pulsed on one shared isochronic envelope"
+}
