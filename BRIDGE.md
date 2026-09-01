@@ -28,6 +28,9 @@ Reward mapping (stillness-shaped):
 score = 1 - (0.55·motion + 0.25·drive + 0.20·entropy)
 ```
 
+If `health` is `partial` or `modality.isolated` is false (optical DarkTrack CHARGE/FAULT),
+score is attenuated. Isolation first, then reward.
+
 Flip polarity to *inhibit high* if you want motion to be the rewarded state.
 
 Same ingest works for optical-body-s3 packets — same schema.

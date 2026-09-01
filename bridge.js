@@ -25,23 +25,32 @@ function scoreFieldObservation(obs) {
   const fuse = r.fuse !== undefined ? r.fuse : 0;
   const raw = 1 - (0.55 * motion + 0.25 * drive + 0.20 * entropy);
   const conf = fuse > 0 ? (0.4 + 0.6 * fuse) : 0.7;
-  return { score: clip01(raw), motion, entropy, drive, fuse, conf, health: (obs && obs.health) || 'unknown' };
+  const health = (obs && obs.health) || "unknown";
+  const phase = (obs && obs.modality && obs.modality.phase) || "hold";
+  let isolated = true;
+  if (obs && obs.modality && obs.modality.isolated === false) isolated = false;
+  if (health === "partial" || health === "error") isolated = false;
+
+  let score = clip01(raw);
+  if (!isolated) score = clip01(score * 0.3);
+
+  return { score: score, motion: motion, entropy: entropy, drive: drive, fuse: fuse, conf: conf, health: health, phase: phase, isolated: isolated };
 }
 
 function ingestObservation(payload) {
   if (payload == null) return null;
   let obs = payload;
-  if (typeof payload === 'string') {
+  if (typeof payload === "string") {
     const line = payload.trim();
     if (!line) return null;
-    const json = line.indexOf('OBS ') === 0 ? line.slice(4) : line;
+    const json = line.indexOf("OBS ") === 0 ? line.slice(4) : line;
     try { obs = JSON.parse(json); } catch (e) { return null; }
   }
-  if (typeof obs.score === 'number' && !obs.field_regions && !obs.regions) {
-    return { score: clip01(obs.score), source: 'score' };
+  if (typeof obs.score === "number" && !obs.field_regions && !obs.regions) {
+    return { score: clip01(obs.score), source: "score", isolated: true, phase: "hold", health: "ok" };
   }
   const scored = scoreFieldObservation(obs);
-  scored.source = obs.body_type || obs.body_id || 'field';
+  scored.source = obs.body_type || obs.body_id || "field";
   return scored;
 }
 
@@ -50,27 +59,27 @@ function connectEchoStream(url, onScore, onStatus) {
   let closed = false;
   let es = null;
   let ws = null;
-  function fail(msg) { if (onStatus) onStatus(msg, 'err'); }
-  if (url.indexOf('ws') === 0) {
+  function fail(msg) { if (onStatus) onStatus(msg, "err"); }
+  if (url.indexOf("ws") === 0) {
     try {
       ws = new WebSocket(url);
-      ws.onopen = () => onStatus && onStatus('echo ws open', '');
+      ws.onopen = () => onStatus && onStatus("echo ws open", "");
       ws.onmessage = (ev) => {
         const scored = ingestObservation(ev.data);
         if (scored && onScore) onScore(scored);
       };
-      ws.onerror = () => fail('echo ws error');
-      ws.onclose = () => { if (!closed) fail('echo ws closed'); };
+      ws.onerror = () => fail("echo ws error");
+      ws.onclose = () => { if (!closed) fail("echo ws closed"); };
     } catch (err) { fail(err.message || String(err)); }
   } else {
     try {
       es = new EventSource(url);
-      es.onopen = () => onStatus && onStatus('echo sse open', '');
+      es.onopen = () => onStatus && onStatus("echo sse open", "");
       es.onmessage = (ev) => {
         const scored = ingestObservation(ev.data);
         if (scored && onScore) onScore(scored);
       };
-      es.onerror = () => fail('echo sse error — is tools/echo_bridge.py running?');
+      es.onerror = () => fail("echo sse error — is tools/echo_bridge.py running?");
     } catch (err) { fail(err.message || String(err)); }
   }
   return {
@@ -82,4 +91,4 @@ function connectEchoStream(url, onScore, onStatus) {
   };
 }
 
-window.SignalField = { ingestObservation, scoreFieldObservation, connectEchoStream };
+window.SignalField = { ingestObservation: ingestObservation, scoreFieldObservation: scoreFieldObservation, connectEchoStream: connectEchoStream };
