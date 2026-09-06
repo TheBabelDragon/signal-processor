@@ -1,0 +1,11 @@
+{
+  "name": "focus_10hz",
+  "mode": "binaural",
+  "carrier_hz": 200.0,
+  "beat_hz": 10.0,
+  "tone_db": -24.0,
+  "music_db": 0.0,
+  "fade_in": 15.0,
+  "fade_out": 30.0,
+  "waveform": "sine"
+}

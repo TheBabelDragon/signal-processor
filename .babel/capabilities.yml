@@ -1,0 +1,64 @@
+capabilities:
+  - name: play-session
+    description: Cold-start audio session. start → run → stop → isolate. Implemented by SignalProducer.noteStart / noteStop in producer.js.
+    inputs:
+      - name: recipe
+        schema: recipe.schema.json
+    outputs:
+      - name: StimulusSession
+        schema: stimulus-session.schema.json
+    operation: emit
+    side_effects:
+      - plays audio in the local browser tab
+      - does not drive body voltage
+      - does not fire ultrasonic array
+    requires:
+      - browser AudioContext
+    produces:
+      - StimulusSession
+      - audio
+    safe: false
+    entry: index.html / PLAY / SESSION
+  - name: export-recipe
+    description: Export the current processor settings as a JSON recipe.
+    inputs: []
+    outputs:
+      - name: recipe
+        schema: recipe.schema.json
+    operation: read
+    side_effects: []
+    requires: []
+    produces:
+      - recipe
+    safe: true
+    entry: index.html export recipe
+  - name: ingest-field-observation
+    description: Score an incoming FieldObservation as the reward signal. health=partial or modality.isolated=false attenuates score.
+    inputs:
+      - name: FieldObservation
+        schema: field-observation.schema.json
+    outputs:
+      - name: reward
+        schema: reward-score.schema.json
+    operation: ingest
+    side_effects: []
+    requires:
+      - bridge.js SignalField.ingestObservation
+    produces:
+      - reward-score
+    safe: true
+    entry: bridge.js / tools/echo_bridge.py
+  - name: emit-producer-packet
+    description: Emit SignalProducer.packet() compatible with FieldObservation ingest.
+    inputs: []
+    outputs:
+      - name: SignalProducerPacket
+        schema: signal-producer-packet.schema.json
+    operation: emit
+    side_effects: []
+    requires:
+      - producer.js
+    produces:
+      - SignalProducerPacket
+    safe: true
+    entry: SignalProducer.packet
