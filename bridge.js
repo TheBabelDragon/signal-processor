@@ -54,34 +54,94 @@ function ingestObservation(payload) {
   return scored;
 }
 
+function isMixedLocal(url) {
+  try {
+    if (typeof location === "undefined") return false;
+    if (location.protocol !== "https:") return false;
+    const u = new URL(url, location.href);
+    if (u.protocol !== "http:") return false;
+    const h = u.hostname;
+    return h === "127.0.0.1" || h === "localhost" || h === "[::1]" || h === "0.0.0.0";
+  } catch (e) {
+    return false;
+  }
+}
+
 function connectEchoStream(url, onScore, onStatus) {
   if (!url) return { close() {} };
   let closed = false;
   let es = null;
   let ws = null;
-  function fail(msg) { if (onStatus) onStatus(msg, "err"); }
+  let lastFailAt = 0;
+  let failCount = 0;
+
+  function fail(msg, hard) {
+    if (closed) return;
+    const now = Date.now();
+    // EventSource retries aggressively — only surface status every 4s
+    if (now - lastFailAt < 4000 && !hard) return;
+    lastFailAt = now;
+    failCount += 1;
+    if (onStatus) onStatus(msg, "err");
+    if (hard || failCount >= 3) {
+      closed = true;
+      try { if (es) es.close(); } catch (e) {}
+      try { if (ws) ws.close(); } catch (e) {}
+    }
+  }
+
+  if (isMixedLocal(url)) {
+    fail("echo blocked on Pages (https→http localhost). serve locally or use a public SSE URL", true);
+    return {
+      close() {
+        closed = true;
+      }
+    };
+  }
+
   if (url.indexOf("ws") === 0) {
     try {
       ws = new WebSocket(url);
-      ws.onopen = () => onStatus && onStatus("echo ws open", "");
+      ws.onopen = () => {
+        failCount = 0;
+        if (onStatus) onStatus("echo ws open", "");
+      };
       ws.onmessage = (ev) => {
         const scored = ingestObservation(ev.data);
         if (scored && onScore) onScore(scored);
       };
       ws.onerror = () => fail("echo ws error");
-      ws.onclose = () => { if (!closed) fail("echo ws closed"); };
-    } catch (err) { fail(err.message || String(err)); }
+      ws.onclose = () => {
+        if (!closed) fail("echo ws closed");
+      };
+    } catch (err) {
+      fail(err.message || String(err), true);
+    }
   } else {
     try {
       es = new EventSource(url);
-      es.onopen = () => onStatus && onStatus("echo sse open", "");
+      es.onopen = () => {
+        failCount = 0;
+        if (onStatus) onStatus("echo sse open", "");
+      };
       es.onmessage = (ev) => {
         const scored = ingestObservation(ev.data);
         if (scored && onScore) onScore(scored);
       };
-      es.onerror = () => fail("echo sse error — is tools/echo_bridge.py running?");
-    } catch (err) { fail(err.message || String(err)); }
+      es.onerror = () => {
+        const state = es ? es.readyState : 2;
+        // CONNECTING=0 keeps retrying; CLOSED=2 is done
+        if (state === 2) {
+          fail("echo sse closed — is tools/echo_bridge.py running?", true);
+        } else {
+          fail("echo sse reconnecting… bridge up?");
+        }
+      };
+    } catch (err) {
+      fail(err.message || String(err), true);
+    }
   }
+
   return {
     close() {
       closed = true;
@@ -91,4 +151,9 @@ function connectEchoStream(url, onScore, onStatus) {
   };
 }
 
-window.SignalField = { ingestObservation: ingestObservation, scoreFieldObservation: scoreFieldObservation, connectEchoStream: connectEchoStream };
+window.SignalField = {
+  ingestObservation: ingestObservation,
+  scoreFieldObservation: scoreFieldObservation,
+  connectEchoStream: connectEchoStream,
+  isMixedLocal: isMixedLocal
+};
