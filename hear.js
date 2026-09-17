@@ -12,11 +12,7 @@
     else parts.push('no-ctx');
     const mode = document.querySelector('#modeSeg button.active');
     if (mode) parts.push(mode.dataset.mode);
-    const tone = document.getElementById('toneSlider');
-    if (tone) parts.push('tone ' + tone.value + 'dB');
-    const master = document.getElementById('masterSlider');
-    if (master) parts.push('master ' + master.value + 'dB');
-    if (location.protocol === 'file:') parts.push('file:// (worklet will fail)');
+    if (location.protocol === 'file:') parts.push('file://');
     return parts.join(' · ');
   }
 
@@ -58,7 +54,7 @@
     const name = document.getElementById('fileName');
     const dur = document.getElementById('fileDuration');
     if (name) name.textContent = fileLabel;
-    if (dur) dur.textContent = formatTime(sourceBuffer.duration) + ' \u00b7 generated';
+    if (dur) dur.textContent = formatTime(sourceBuffer.duration) + ' · generated';
     return sourceBuffer;
   }
 
@@ -93,7 +89,7 @@
           return;
         }
         if (!audioCtx) audioCtx = new (AC())();
-        setStatus('unlocking audio · ' + dbg());
+        setStatus('unlocking audio…');
         await audioCtx.resume();
         startKeepalive(audioCtx);
         await ensureBed(600);
@@ -102,7 +98,7 @@
           recipe.master_db = parseFloat(document.getElementById('masterSlider').value) || 0;
         }
         if (!(recipe.tone_db > -45)) recipe.tone_db = -16;
-        setStatus('building graph · ' + dbg());
+        setStatus('building graph…');
         const nodes = await buildGraph(audioCtx, sourceBuffer, recipe);
         meterAnalyser = audioCtx.createAnalyser();
         meterAnalyser.fftSize = 256;
@@ -111,7 +107,7 @@
         if (window.SignalProducer) SignalProducer.noteStart(recipe.mode, recipe);
         fresh.textContent = '\u25a0 STOP';
         fresh.classList.add('playing');
-        setStatus('PLAY · 440Hz probe + ' + recipe.mode + ' · ' + dbg());
+        setStatus('playing ' + (fileLabel || recipe.mode));
         startMeter();
         nodes.src.onended = function () { if (playing === nodes) stopPlayback(); };
         setTimeout(function () {
@@ -121,15 +117,15 @@
           let peak = 0;
           for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i] - 128));
           if (peak < 2) {
-            setStatus('graph peak ~0 — probe 440 still on destination · ' + dbg(), 'warn');
+            setStatus('silent graph — probe still on · ' + dbg(), 'warn');
           } else {
             stopKeepalive();
-            setStatus('graph live · probe off · ' + recipe.mode + ' · ' + dbg());
+            setStatus('playing ' + (fileLabel || recipe.mode));
           }
         }, 350);
       } catch (err) {
         console.error(err);
-        setStatus('playback failed: ' + (err && err.message ? err.message : err) + ' · ' + dbg(), 'err');
+        setStatus('playback failed: ' + (err && err.message ? err.message : err), 'err');
       }
     });
   }
@@ -172,5 +168,6 @@
     stopPlayback = wrappedStop;
   }
 
-  setStatus('debug-max · PLAY starts a 440 probe + graph · ' + dbg());
+  // Quiet boot — no debug-max spam over the transport line
+  setStatus('headphones · play starts a tone bed if no file is loaded');
 })();
