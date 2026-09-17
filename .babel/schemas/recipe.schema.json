@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "StimulusRecipe",
+  "description": "Derived from recipes/*.json in signal-processor.",
+  "type": "object",
+  "required": ["name", "mode"],
+  "properties": {
+    "name": { "type": "string" },
+    "mode": { "type": "string" },
+    "carrier_hz": { "type": "number" },
+    "beat_hz": { "type": "number" },
+    "tone_db": { "type": "number" },
+    "music_db": { "type": "number" },
+    "fade_in": { "type": "number" },
+    "fade_out": { "type": "number" },
+    "waveform": { "type": "string" }
+  }
+}

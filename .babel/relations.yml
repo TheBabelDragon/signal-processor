@@ -1,0 +1,25 @@
+produces:
+  - repo: metafield-engine
+    artifact: SignalProducerPacket
+  - repo: optical-body-s3
+    artifact: StimulusSession
+consumes:
+  - repo: optical-body-s3
+    artifact: FieldObservation
+  - repo: echo-grid-ultrasonic-os
+    artifact: FieldObservation
+  - repo: eeg-loop
+    artifact: FieldObservation
+compatible_with:
+  - optical-body-s3
+  - echo-grid-ultrasonic-os
+  - eeg-loop
+  - metafield-engine
+observes:
+  - optical-body-s3
+  - echo-grid-ultrasonic-os
+controls: []
+extends: []
+depends_on:
+  - babel-interface
+isolates: []

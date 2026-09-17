@@ -1,0 +1,68 @@
+babel: "0.1"
+identity:
+  name: signal-processor
+  owner: TheBabelDragon
+  repo: TheBabelDragon/signal-processor
+  url: https://github.com/TheBabelDragon/signal-processor
+  pages: https://thebabeldragon.github.io/signal-processor/
+  kind: human-interface
+  version: "0.1.0"
+purpose: >
+  Browser stimulus / session loop. Binaural, isochronic, and modulation
+  processor with live preview and WAV export. Human surface is the Pages
+  application. Machine surface is this .babel contract plus producer.js
+  and bridge.js. Audio only. No body voltage.
+status: operational
+entrypoints:
+  - kind: pages
+    url: https://thebabeldragon.github.io/signal-processor/
+  - kind: file
+    path: index.html
+    role: human-interface
+  - kind: module
+    path: producer.js
+    symbol: SignalProducer
+  - kind: module
+    path: bridge.js
+    symbol: SignalField
+  - kind: tool
+    path: tools/echo_bridge.py
+    role: FieldObservation SSE bridge
+runtime:
+  language: javascript
+  requires:
+    - browser
+  optional:
+    - python3 tools/echo_bridge.py
+    - local http.server
+inputs:
+  - name: recipe
+    schema: recipe.schema.json
+  - name: FieldObservation
+    schema: field-observation.schema.json
+    source: optical-body-s3 | echo-grid-ultrasonic-os | eeg-loop
+outputs:
+  - name: StimulusSession
+    schema: stimulus-session.schema.json
+  - name: SignalProducerPacket
+    schema: signal-producer-packet.schema.json
+  - name: wav
+    media: audio/wav
+capabilities:
+  - play-session
+  - export-recipe
+  - ingest-field-observation
+  - emit-producer-packet
+operations:
+  safe:
+    - export-recipe
+    - ingest-field-observation
+    - emit-producer-packet
+    - inspect-pages
+  mutation:
+    - play-session
+    - export-wav
+notes: >
+  Pages UI is visualization / control. .babel is authoritative for machine
+  discovery. Does not drive Echo Grid emitters. Incoming health=partial is
+  not a full reward.
