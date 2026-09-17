@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Signal — Precision Music Processor</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20260917b">
 </head>
 <body>
 <div class="wrap">
@@ -123,6 +123,7 @@
         </select>
       </div>
       <div class="field"><label>Echo SSE</label><input type="text" id="nfEchoUrl" value="http://127.0.0.1:8765/events" style="flex:1;min-width:0;background:var(--panel-2);border:1px solid var(--line);color:var(--phosphor);font-family:var(--mono);font-size:12px;border-radius:6px;padding:6px 8px;"></div>
+      <div class="status echo-link" id="echoLinkStatus">echo link idle · localhost only when serving over http</div>
       <div class="field"><label>Bed</label>
         <select id="nfBed">
           <option value="silence" selected>silence + tone</option>
@@ -190,14 +191,14 @@
     </div>
   </details>
 </div>
-<script src="engine.js"></script>
-<script src="iso4.js"></script>
-<script src="producer.js"></script>
-<script src="ui.js"></script>
-<script src="ui-iso4.js"></script>
-<script src="beds.js"></script>
-<script src="bridge.js"></script>
-<script src="neuro.js"></script>
-<script src="hear.js"></script>
+<script src="engine.js?v=20260917b"></script>
+<script src="iso4.js?v=20260917b"></script>
+<script src="producer.js?v=20260917b"></script>
+<script src="ui.js?v=20260917b"></script>
+<script src="ui-iso4.js?v=20260917b"></script>
+<script src="beds.js?v=20260917b"></script>
+<script src="bridge.js?v=20260917b"></script>
+<script src="neuro.js?v=20260917b"></script>
+<script src="hear.js?v=20260917b"></script>
 </body>
 </html>
