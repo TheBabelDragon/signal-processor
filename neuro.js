@@ -17,7 +17,6 @@ const NF_PROTOCOLS = {
   beta_focus:  { band: 'beta',  polarity: 1,  hint: 'active focus hold' },
 };
 
-/** Echo-oriented session presets — sensor + polarity + band + bed in one tap */
 const ECHO_PRESETS = {
   echo_still_alpha: {
     label: 'echo · still α',
@@ -97,6 +96,18 @@ function nfSetStatus(msg, kind) {
   n.className = 'status' + (kind ? ' ' + kind : '');
 }
 
+/** Echo transport line only — never stomps session / play status */
+function echoLinkStatus(msg, kind) {
+  const n = document.getElementById('echoLinkStatus');
+  if (!n) {
+    // fallback only if markup missing
+    if (kind === 'err') nfSetStatus(msg, kind);
+    return;
+  }
+  n.textContent = msg;
+  n.className = 'status echo-link' + (kind ? ' ' + kind : '');
+}
+
 function applyBandToUI(key) {
   const band = NF_BANDS[key];
   if (!band) return;
@@ -148,6 +159,7 @@ function applyEchoPreset(key) {
   });
   showEchoViz(true);
   nfSetStatus(p.label + ' \u2014 ' + p.hint);
+  echoLinkStatus('echo preset ready · start session to connect');
 }
 
 function renderBandChips() {
@@ -232,16 +244,13 @@ function drawEchoField() {
     const v = Math.max(0, Math.min(1, Number(f[keys[i]]) || 0));
     const x = gap + i * (barW + gap);
     const bh = Math.max(2, v * maxH);
-    // track
     ctx.fillStyle = '#1a2420';
     ctx.fillRect(x, 5, barW, maxH);
-    // fill from bottom
     const grad = ctx.createLinearGradient(0, h, 0, 0);
     grad.addColorStop(0, colors[i]);
     grad.addColorStop(1, colors[i] + '88');
     ctx.fillStyle = grad;
     ctx.fillRect(x, 5 + maxH - bh, barW, bh);
-    // value text
     ctx.fillStyle = '#7f9a8e';
     ctx.font = '10px ui-monospace, Menlo, monospace';
     ctx.textAlign = 'center';
@@ -389,8 +398,10 @@ async function startSession() {
     fileLabel = bed + '-bed';
     document.getElementById('fileName').textContent = fileLabel;
     document.getElementById('fileDuration').textContent = formatTime(sourceBuffer.duration) + ' \u00b7 generated';
-    document.getElementById('playBtn').disabled = false;
-    document.getElementById('exportBtn').disabled = false;
+    const pb = document.getElementById('playBtn');
+    const eb = document.getElementById('exportBtn');
+    if (pb) pb.disabled = false;
+    if (eb) eb.disabled = false;
   } else if (!sourceBuffer) {
     nfSetStatus('load a file or pick a generated bed', 'warn');
     return;
@@ -404,12 +415,14 @@ async function startSession() {
   if (sensor === 'external') {
     showEchoViz(true);
     const url = (document.getElementById('nfEchoUrl').value || '').trim() || 'http://127.0.0.1:8765/events';
+    echoLinkStatus('connecting echo…');
     nf.echo = connectEchoStream(url, (scored) => {
       nf.reward = shapedReward(scored.score);
       applyScoredField(scored);
-    }, nfSetStatus);
+    }, echoLinkStatus);
   } else {
     showEchoViz(false);
+    echoLinkStatus('echo link idle');
   }
 
   document.getElementById('fadeIn').value = Math.min(20, Math.max(4, minutes));
@@ -422,8 +435,11 @@ async function startSession() {
   meterAnalyser.fftSize = 256;
   nodes.limiter.connect(meterAnalyser);
   playing = nodes;
-  document.getElementById('playBtn').textContent = '\u25a0 STOP';
-  document.getElementById('playBtn').classList.add('playing');
+  const playBtn = document.getElementById('playBtn');
+  if (playBtn) {
+    playBtn.textContent = '\u25a0 STOP';
+    playBtn.classList.add('playing');
+  }
   startMeter();
   nodes.src.onended = () => { if (playing === nodes) stopSession('bed ended'); };
 
@@ -449,6 +465,7 @@ function stopSession(msg) {
   document.getElementById('nfStartBtn').classList.remove('playing');
   if (playing) stopPlayback();
   nfSetStatus(msg || 'session stopped');
+  echoLinkStatus('echo link idle');
 }
 
 function exportSessionLog() {
@@ -505,7 +522,9 @@ document.getElementById('nfStartBtn').addEventListener('click', () => {
 document.getElementById('nfLogBtn').addEventListener('click', exportSessionLog);
 document.getElementById('nfStack').addEventListener('change', (e) => applyProtocol(e.target.value));
 document.getElementById('nfSensor').addEventListener('change', (e) => {
-  showEchoViz(e.target.value === 'external');
+  const ext = e.target.value === 'external';
+  showEchoViz(ext);
+  echoLinkStatus(ext ? 'echo selected · start session to connect' : 'echo link idle');
 });
 
 renderBandChips();
@@ -514,3 +533,6 @@ applyBandToUI('alpha');
 drawReward();
 drawEchoField();
 updateEchoBadges();
+if (typeof location !== 'undefined' && location.protocol === 'https:') {
+  echoLinkStatus('on Pages (https) · localhost SSE is blocked — serve over http for echo bridge');
+}
