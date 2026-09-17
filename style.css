@@ -49,8 +49,8 @@ input[type=range]::-webkit-slider-thumb{ -webkit-appearance: none; width:18px; h
 input[type=number]{ background: var(--panel-2); border: 1px solid var(--line); color: var(--phosphor); font-family: var(--mono); font-size: 14px; border-radius: 6px; padding: 6px 8px; width: 96px; }
 .level-row{ margin-bottom: 12px; }
 .level-row:last-child{ margin-bottom:0; }
-.transport{ display:flex; gap:10px; margin-top: 4px; }
-button.big{ flex:1; padding: 15px 10px; border-radius: 9px; border: 1px solid var(--line-bright); font-family: var(--sans); font-size: 14px; font-weight:600; letter-spacing: 0.02em; background: var(--panel-2); color: var(--text); }
+.transport{ display:flex; gap:10px; margin-top: 8px; position: relative; z-index: 1; }
+button.big{ flex:1; padding: 15px 10px; border-radius: 9px; border: 1px solid var(--line-bright); font-family: var(--sans); font-size: 14px; font-weight:600; letter-spacing: 0.02em; background: var(--panel-2); color: var(--text); min-height: 48px; }
 button.big.primary{ background: rgba(125,255,178,0.12); color: var(--phosphor); border-color: var(--phosphor-dim); }
 button.big.playing{ background: rgba(255,180,84,0.12); color: var(--amber); border-color: var(--amber); }
 button.big:disabled{ opacity: 0.4; }
@@ -78,12 +78,30 @@ select{ background: var(--panel-2); border: 1px solid var(--line); color: var(--
 .chip.active{ border-color: var(--phosphor-dim); color: var(--phosphor); }
 .chip.echo{ border-style: dashed; }
 .chip.echo.active{ border-color: var(--amber); color: var(--amber); }
-.status{ font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); text-align:center; margin-top: 10px; min-height: 14px; }
+.status{
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  text-align:center;
+  margin-top: 10px;
+  min-height: 1.4em;
+  line-height: 1.35;
+  word-break: break-word;
+  padding: 0 4px;
+}
 .status.warn{ color: var(--amber); }
 .status.err{ color: var(--danger); }
+.status.echo-link{
+  text-align: left;
+  margin: -4px 0 12px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+}
 a.recipe-link{ color: var(--phosphor-dim); font-size: 11.5px; }
 
-/* Echo field visualizer */
 .echo-viz{
   margin: 4px 0 14px;
   padding: 10px 10px 8px;
