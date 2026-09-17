@@ -38,6 +38,21 @@ Sensors: none, manual tap, mic stillness, Echo / FieldObservation.
 
 Incoming `health=partial` (optical dark isolation still CHARGE/FAULT) is not treated as a full reward.
 
+### Echo mode — visualizer + presets
+
+When sensor = `echo / field obs`, a live field panel shows **motion · drive · entropy · fuse** bars plus health / phase / isolation badges. Reward meter stays tied to the same scored stream.
+
+One-tap Echo presets (dashed chips under the band chips):
+
+| chip | what it sets |
+|------|----------------|
+| `echo · still α` | external sensor, reward-high, alpha, silence bed |
+| `echo · still SMR` | external, reward-high, SMR, pink bed |
+| `echo · move β` | external, **inhibit-high** (motion rewarded), beta |
+| `echo · entrain α` | external, open-loop entrain, alpha |
+
+Session log JSON now also records field snapshots (motion/drive/entropy/isolated).
+
 ## Echo Grid — perchance not the array
 
 This tab does **not** drive ultrasonic emitters. Echo already has `--body --drive`.
