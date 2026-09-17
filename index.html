@@ -91,6 +91,7 @@
     <summary>Neurofeedback</summary>
     <div class="adv-body">
       <div class="chips" id="bandChips"></div>
+      <div class="chips" id="echoPresetChips" style="margin-top:4px;"></div>
       <div class="field"><label>Stack</label>
         <select id="nfStack">
           <option value="">custom band</option>
@@ -131,6 +132,20 @@
         </select>
       </div>
       <div class="field"><label>Session (min)</label><input type="number" id="nfMinutes" min="1" max="90" step="1" value="10"></div>
+
+      <div id="echoViz" class="echo-viz" hidden>
+        <div class="echo-badges">
+          <span class="echo-badge" id="echoHealth">health —</span>
+          <span class="echo-badge" id="echoPhase">phase —</span>
+          <span class="echo-badge" id="echoIsolated">iso —</span>
+          <span class="echo-badge dim" id="echoSource">src —</span>
+        </div>
+        <canvas id="echoFieldMeter" width="440" height="72"></canvas>
+        <div class="echo-labels">
+          <span>motion</span><span>drive</span><span>entropy</span><span>fuse</span>
+        </div>
+      </div>
+
       <div class="readout" style="margin-bottom:10px;">
         <div class="row"><label>REWARD</label><span class="value" id="nfRewardVal">—</span></div>
         <canvas id="nfRewardMeter" width="440" height="18"></canvas>
