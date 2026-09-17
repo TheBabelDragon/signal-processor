@@ -17,6 +17,50 @@ const NF_PROTOCOLS = {
   beta_focus:  { band: 'beta',  polarity: 1,  hint: 'active focus hold' },
 };
 
+/** Echo-oriented session presets — sensor + polarity + band + bed in one tap */
+const ECHO_PRESETS = {
+  echo_still_alpha: {
+    label: 'echo · still α',
+    band: 'alpha',
+    polarity: 1,
+    protocol: 'reward',
+    stack: 'alpha_up',
+    bed: 'silence',
+    minutes: 12,
+    hint: 'reward stillness · alpha hold',
+  },
+  echo_still_smr: {
+    label: 'echo · still SMR',
+    band: 'smr',
+    polarity: 1,
+    protocol: 'reward',
+    stack: 'smr',
+    bed: 'pink',
+    minutes: 15,
+    hint: 'quiet body · SMR uptrain',
+  },
+  echo_motion_beta: {
+    label: 'echo · move β',
+    band: 'beta',
+    polarity: -1,
+    protocol: 'reward',
+    stack: 'beta_focus',
+    bed: 'brown',
+    minutes: 10,
+    hint: 'inhibit high · motion rewarded',
+  },
+  echo_entrain_alpha: {
+    label: 'echo · entrain α',
+    band: 'alpha',
+    polarity: 1,
+    protocol: 'entrain',
+    stack: 'alpha_up',
+    bed: 'silence',
+    minutes: 20,
+    hint: 'open loop · Echo still visualizes',
+  },
+};
+
 const nf = {
   band: 'alpha',
   running: false,
@@ -32,6 +76,18 @@ const nf = {
   lastTap: 0,
   echo: null,
   log: [],
+  field: {
+    motion: 0,
+    drive: 0,
+    entropy: 0,
+    fuse: 0,
+    conf: 0,
+    health: '—',
+    phase: '—',
+    isolated: true,
+    source: '—',
+    live: false,
+  },
 };
 
 function nfSetStatus(msg, kind) {
@@ -71,6 +127,29 @@ function applyProtocol(name) {
   nfSetStatus(name.replace('_', ' ') + ' \u2014 ' + p.hint);
 }
 
+function applyEchoPreset(key) {
+  const p = ECHO_PRESETS[key];
+  if (!p) return;
+  applyBandToUI(p.band);
+  const stack = document.getElementById('nfStack');
+  if (stack) stack.value = p.stack || '';
+  const pol = document.getElementById('nfPolarity');
+  if (pol) pol.value = String(p.polarity);
+  const proto = document.getElementById('nfProtocol');
+  if (proto) proto.value = p.protocol;
+  const sensor = document.getElementById('nfSensor');
+  if (sensor) sensor.value = 'external';
+  const bed = document.getElementById('nfBed');
+  if (bed) bed.value = p.bed;
+  const minutes = document.getElementById('nfMinutes');
+  if (minutes) minutes.value = String(p.minutes);
+  document.querySelectorAll('#echoPresetChips .chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.echo === key);
+  });
+  showEchoViz(true);
+  nfSetStatus(p.label + ' \u2014 ' + p.hint);
+}
+
 function renderBandChips() {
   const wrap = document.getElementById('bandChips');
   wrap.innerHTML = '';
@@ -82,6 +161,92 @@ function renderBandChips() {
     chip.addEventListener('click', () => applyBandToUI(key));
     wrap.appendChild(chip);
   });
+}
+
+function renderEchoPresetChips() {
+  const wrap = document.getElementById('echoPresetChips');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  Object.keys(ECHO_PRESETS).forEach(key => {
+    const p = ECHO_PRESETS[key];
+    const chip = document.createElement('div');
+    chip.className = 'chip echo';
+    chip.dataset.echo = key;
+    chip.textContent = p.label;
+    chip.title = p.hint;
+    chip.addEventListener('click', () => applyEchoPreset(key));
+    wrap.appendChild(chip);
+  });
+}
+
+function showEchoViz(on) {
+  const panel = document.getElementById('echoViz');
+  if (!panel) return;
+  panel.hidden = !on;
+  if (on) drawEchoField();
+}
+
+function updateEchoBadges() {
+  const f = nf.field;
+  const healthEl = document.getElementById('echoHealth');
+  const phaseEl = document.getElementById('echoPhase');
+  const isoEl = document.getElementById('echoIsolated');
+  const srcEl = document.getElementById('echoSource');
+  const panel = document.getElementById('echoViz');
+  if (!healthEl) return;
+
+  healthEl.textContent = 'health ' + (f.health || '—');
+  phaseEl.textContent = 'phase ' + (f.phase || '—');
+  isoEl.textContent = f.isolated ? 'iso ✓' : 'iso ✗';
+  srcEl.textContent = 'src ' + (f.source || '—');
+
+  const h = String(f.health || '').toLowerCase();
+  healthEl.className = 'echo-badge' + (h === 'ok' || h === '—' ? ' ok' : h === 'partial' || h === 'stale' ? ' warn' : ' err');
+  phaseEl.className = 'echo-badge' + (f.phase === 'hold' ? ' ok' : f.phase === 'charge' ? ' warn' : '');
+  isoEl.className = 'echo-badge' + (f.isolated ? ' ok' : ' err');
+  srcEl.className = 'echo-badge dim';
+
+  if (panel) {
+    panel.classList.toggle('live', !!f.live && f.isolated);
+    panel.classList.toggle('fault', !!f.live && !f.isolated);
+  }
+}
+
+function drawEchoField() {
+  const canvas = document.getElementById('echoFieldMeter');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  const f = nf.field;
+  const keys = ['motion', 'drive', 'entropy', 'fuse'];
+  const colors = ['#ff6b6b', '#ffb454', '#7dffb2', '#5b9cff'];
+  const n = keys.length;
+  const gap = 10;
+  const barW = (w - gap * (n + 1)) / n;
+  const maxH = h - 10;
+
+  ctx.fillStyle = '#0f1613';
+  ctx.fillRect(0, 0, w, h);
+
+  for (let i = 0; i < n; i++) {
+    const v = Math.max(0, Math.min(1, Number(f[keys[i]]) || 0));
+    const x = gap + i * (barW + gap);
+    const bh = Math.max(2, v * maxH);
+    // track
+    ctx.fillStyle = '#1a2420';
+    ctx.fillRect(x, 5, barW, maxH);
+    // fill from bottom
+    const grad = ctx.createLinearGradient(0, h, 0, 0);
+    grad.addColorStop(0, colors[i]);
+    grad.addColorStop(1, colors[i] + '88');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, 5 + maxH - bh, barW, bh);
+    // value text
+    ctx.fillStyle = '#7f9a8e';
+    ctx.font = '10px ui-monospace, Menlo, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText((v * 100).toFixed(0), x + barW / 2, h - 2);
+  }
 }
 
 function drawReward() {
@@ -97,6 +262,22 @@ function drawReward() {
   grad.addColorStop(1, '#ffb454');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, Math.max(0, Math.min(1, nf.reward)) * w, h);
+}
+
+function applyScoredField(scored) {
+  if (!scored) return;
+  nf.field.motion = scored.motion != null ? scored.motion : nf.field.motion;
+  nf.field.drive = scored.drive != null ? scored.drive : nf.field.drive;
+  nf.field.entropy = scored.entropy != null ? scored.entropy : nf.field.entropy;
+  nf.field.fuse = scored.fuse != null ? scored.fuse : nf.field.fuse;
+  nf.field.conf = scored.conf != null ? scored.conf : nf.field.conf;
+  nf.field.health = scored.health != null ? scored.health : nf.field.health;
+  nf.field.phase = scored.phase != null ? scored.phase : nf.field.phase;
+  nf.field.isolated = scored.isolated != null ? scored.isolated : nf.field.isolated;
+  nf.field.source = scored.source != null ? scored.source : nf.field.source;
+  nf.field.live = true;
+  updateEchoBadges();
+  drawEchoField();
 }
 
 async function startMic() {
@@ -122,6 +303,8 @@ function stopMic() {
 function stopEcho() {
   if (nf.echo && nf.echo.close) nf.echo.close();
   nf.echo = null;
+  nf.field.live = false;
+  updateEchoBadges();
 }
 
 function readMicStillness() {
@@ -169,7 +352,15 @@ function tickSession() {
   nf.score += nf.reward;
   nf.samples += 1;
   if (nf.samples % 30 === 0) {
-    nf.log.push({ t: +elapsed.toFixed(2), reward: +nf.reward.toFixed(3), band: nf.band });
+    nf.log.push({
+      t: +elapsed.toFixed(2),
+      reward: +nf.reward.toFixed(3),
+      band: nf.band,
+      motion: +nf.field.motion.toFixed(3),
+      drive: +nf.field.drive.toFixed(3),
+      entropy: +nf.field.entropy.toFixed(3),
+      isolated: nf.field.isolated,
+    });
   }
 
   const protocol = document.getElementById('nfProtocol').value;
@@ -211,10 +402,14 @@ async function startSession() {
     catch (err) { nfSetStatus('mic denied \u2014 use tap or echo stream', 'err'); return; }
   }
   if (sensor === 'external') {
+    showEchoViz(true);
     const url = (document.getElementById('nfEchoUrl').value || '').trim() || 'http://127.0.0.1:8765/events';
     nf.echo = connectEchoStream(url, (scored) => {
       nf.reward = shapedReward(scored.score);
+      applyScoredField(scored);
     }, nfSetStatus);
+  } else {
+    showEchoViz(false);
   }
 
   document.getElementById('fadeIn').value = Math.min(20, Math.max(4, minutes));
@@ -262,6 +457,7 @@ function exportSessionLog() {
     duration: nf.duration,
     avg: nf.samples ? nf.score / nf.samples : 0,
     samples: nf.log,
+    field_last: nf.field,
   }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -278,7 +474,11 @@ window.SignalObservation = {
   },
   observe(payload) {
     const scored = ingestObservation(payload);
-    if (scored) nf.reward = shapedReward(scored.score);
+    if (scored) {
+      nf.reward = shapedReward(scored.score);
+      applyScoredField(scored);
+      showEchoViz(true);
+    }
   }
 };
 window.addEventListener('signal-observation', (e) => {
@@ -288,7 +488,11 @@ window.addEventListener('signal-observation', (e) => {
     return;
   }
   const scored = ingestObservation(e.detail);
-  if (scored) nf.reward = shapedReward(scored.score);
+  if (scored) {
+    nf.reward = shapedReward(scored.score);
+    applyScoredField(scored);
+    showEchoViz(true);
+  }
 });
 
 document.getElementById('nfRewardBtn').addEventListener('click', () => {
@@ -300,7 +504,13 @@ document.getElementById('nfStartBtn').addEventListener('click', () => {
 });
 document.getElementById('nfLogBtn').addEventListener('click', exportSessionLog);
 document.getElementById('nfStack').addEventListener('change', (e) => applyProtocol(e.target.value));
+document.getElementById('nfSensor').addEventListener('change', (e) => {
+  showEchoViz(e.target.value === 'external');
+});
 
 renderBandChips();
+renderEchoPresetChips();
 applyBandToUI('alpha');
 drawReward();
+drawEchoField();
+updateEchoBadges();
