@@ -2,15 +2,23 @@
 
 Binaural / isochronic / modulation processor plus a session loop.
 
+**Live demo → [thebabeldragon.github.io/signal-processor](https://thebabeldragon.github.io/signal-processor/)** ✨
+
 https://github.com/TheBabelDragon/signal-processor
 
-## Run
+## Run locally
 
 ```bash
 python3 -m http.server 8080
 ```
 
-Pages: Settings → Pages → Source → GitHub Actions. Until that click, deploys fail.
+Then open http://localhost:8080
+
+### GitHub Pages
+
+Already deployed: **[https://thebabeldragon.github.io/signal-processor/](https://thebabeldragon.github.io/signal-processor/)**
+
+If deploys ever fail, check **Settings → Pages → Source → GitHub Actions** (one-time setup).
 
 ## Producer contract
 
