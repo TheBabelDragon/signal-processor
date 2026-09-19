@@ -88,6 +88,7 @@ const nf = {
     live: false,
   },
 };
+window.nf = nf;
 
 function nfSetStatus(msg, kind) {
   const n = document.getElementById('nfStatus');
@@ -96,11 +97,9 @@ function nfSetStatus(msg, kind) {
   n.className = 'status' + (kind ? ' ' + kind : '');
 }
 
-/** Echo transport line only — never stomps session / play status */
 function echoLinkStatus(msg, kind) {
   const n = document.getElementById('echoLinkStatus');
   if (!n) {
-    // fallback only if markup missing
     if (kind === 'err') nfSetStatus(msg, kind);
     return;
   }
@@ -191,11 +190,12 @@ function renderEchoPresetChips() {
   });
 }
 
-function showEchoViz(on) {
+function showEchoViz(_on) {
   const panel = document.getElementById('echoViz');
   if (!panel) return;
-  panel.hidden = !on;
-  if (on) drawEchoField();
+  // Always visible — demo or live
+  panel.hidden = false;
+  drawEchoField();
 }
 
 function updateEchoBadges() {
@@ -287,6 +287,8 @@ function applyScoredField(scored) {
   nf.field.live = true;
   updateEchoBadges();
   drawEchoField();
+  const label = document.getElementById('fieldModeLabel');
+  if (label) label.textContent = 'live · Echo FieldObservation';
 }
 
 async function startMic() {
@@ -314,6 +316,8 @@ function stopEcho() {
   nf.echo = null;
   nf.field.live = false;
   updateEchoBadges();
+  const label = document.getElementById('fieldModeLabel');
+  if (label) label.textContent = 'demo · live when Echo connects';
 }
 
 function readMicStillness() {
@@ -412,8 +416,8 @@ async function startSession() {
     try { await startMic(); }
     catch (err) { nfSetStatus('mic denied \u2014 use tap or echo stream', 'err'); return; }
   }
+  showEchoViz(true);
   if (sensor === 'external') {
-    showEchoViz(true);
     const url = (document.getElementById('nfEchoUrl').value || '').trim() || 'http://127.0.0.1:8765/events';
     echoLinkStatus('connecting echo…');
     nf.echo = connectEchoStream(url, (scored) => {
@@ -421,7 +425,6 @@ async function startSession() {
       applyScoredField(scored);
     }, echoLinkStatus);
   } else {
-    showEchoViz(false);
     echoLinkStatus('echo link idle');
   }
 
@@ -523,7 +526,7 @@ document.getElementById('nfLogBtn').addEventListener('click', exportSessionLog);
 document.getElementById('nfStack').addEventListener('change', (e) => applyProtocol(e.target.value));
 document.getElementById('nfSensor').addEventListener('change', (e) => {
   const ext = e.target.value === 'external';
-  showEchoViz(ext);
+  showEchoViz(true);
   echoLinkStatus(ext ? 'echo selected · start session to connect' : 'echo link idle');
 });
 
@@ -531,7 +534,7 @@ renderBandChips();
 renderEchoPresetChips();
 applyBandToUI('alpha');
 drawReward();
-drawEchoField();
+showEchoViz(true);
 updateEchoBadges();
 if (typeof location !== 'undefined' && location.protocol === 'https:') {
   echoLinkStatus('on Pages (https) · localhost SSE is blocked — serve over http for echo bridge');
