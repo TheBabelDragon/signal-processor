@@ -28,6 +28,40 @@ header h1{ font-size: 18px; letter-spacing: 0.02em; margin:0; font-weight: 600; 
 header h1 span{ color: var(--phosphor); }
 header .sub{ font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
 .panel{ background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+
+/* Hero FIELD visualizer — always visible */
+.field-panel{
+  padding: 12px 12px 10px;
+  background: #0a100e;
+  border-color: var(--phosphor-dim);
+  box-shadow: 0 0 24px rgba(125,255,178,0.06);
+}
+.field-panel-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  margin-bottom: 8px;
+  padding: 0 2px;
+}
+.field-title{
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--phosphor);
+}
+.field-sub{
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+canvas#fieldViz{
+  width: 100%;
+  height: 220px;
+  display: block;
+  border-radius: 8px;
+  background: #070c0a;
+}
+
 #dropzone{ border: 1px dashed var(--line-bright); border-radius: 8px; padding: 28px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background-color .15s; }
 #dropzone.drag{ border-color: var(--phosphor); background: rgba(125,255,178,0.05); }
 #dropzone .prompt{ font-size: 13px; color: var(--text-dim); letter-spacing: 0.04em; }
@@ -117,6 +151,9 @@ a.recipe-link{ color: var(--phosphor-dim); font-size: 11.5px; }
 .echo-viz.fault{
   border-color: var(--danger);
   box-shadow: 0 0 12px rgba(255,107,107,0.12);
+}
+.echo-viz.demo{
+  border-color: var(--amber);
 }
 .echo-badges{
   display:flex; flex-wrap:wrap; gap:6px; margin-bottom: 4px;
