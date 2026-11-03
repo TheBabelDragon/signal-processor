@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Signal — Precision Music Processor</title>
 <link rel="stylesheet" href="style.css?v=20260919a">
+<link rel="stylesheet" href="acoustic-probe.css?v=20261102a">
 </head>
 <body>
 <div class="wrap">
@@ -19,6 +20,51 @@
       <span class="field-sub" id="fieldModeLabel">demo · live when Echo connects</span>
     </div>
     <canvas id="fieldViz" width="880" height="440"></canvas>
+  </div>
+
+  <div class="ap-panel" id="acousticProbePanel">
+    <div class="ap-panel-head">
+      <span class="ap-title">ACOUSTIC PROBE</span>
+      <span class="ap-badge idle" id="apBadge">IDLE</span>
+    </div>
+
+    <div class="ap-controls">
+      <button type="button" class="primary" id="apMonBtn">▶ START MONITOR</button>
+      <button type="button" id="apPingBtn">PING</button>
+      <button type="button" id="apAutoBtn">AUTO PING</button>
+      <button type="button" id="apSynthBtn">SYNTHETIC TEST</button>
+      <button type="button" class="full" id="apClearBtn">CLEAR EVENTS</button>
+    </div>
+
+    <div class="ap-field"><label>F start</label><input type="range" id="apFreqStart" min="800" max="6000" step="50" value="1800"><span class="val" id="apFreqStartVal">1800 Hz</span></div>
+    <div class="ap-field"><label>F end</label><input type="range" id="apFreqEnd" min="1000" max="8000" step="50" value="4200"><span class="val" id="apFreqEndVal">4200 Hz</span></div>
+    <div class="ap-field"><label>Duration</label><input type="range" id="apDur" min="10" max="120" step="5" value="40"><span class="val" id="apDurVal">40 ms</span></div>
+    <div class="ap-field"><label>Amplitude</label><input type="range" id="apAmp" min="0.02" max="0.5" step="0.01" value="0.18"><span class="val" id="apAmpVal">0.18</span></div>
+    <div class="ap-field"><label>Interval</label><input type="range" id="apInterval" min="400" max="5000" step="100" value="1500"><span class="val" id="apIntervalVal">1500 ms</span></div>
+    <div class="ap-field"><label>Threshold</label><input type="range" id="apThresh" min="0.15" max="0.9" step="0.01" value="0.42"><span class="val" id="apThreshVal">0.42</span></div>
+
+    <div class="ap-meters">
+      <div class="ap-meter-label">probe template</div>
+      <canvas id="apWave" width="440" height="48"></canvas>
+      <div class="ap-meter-label">input level</div>
+      <canvas id="apLevel" width="440" height="14"></canvas>
+    </div>
+
+    <div class="ap-readout">
+      <span class="k">sequence</span><span class="v" id="apSeq">—</span>
+      <span class="k">sample rate</span><span class="v" id="apSr">—</span>
+      <span class="k">confidence</span><span class="v" id="apConf">—</span>
+      <span class="k">latency Δ</span><span class="v" id="apLat">—</span>
+      <span class="k">input RMS</span><span class="v" id="apRms">—</span>
+      <span class="k">clipped</span><span class="v" id="apClip">—</span>
+      <span class="k">permission</span><span class="v" id="apPerm">—</span>
+      <span class="k">node</span><span class="v" id="apNode">browser-local</span>
+    </div>
+
+    <div class="ap-meter-label">recent events</div>
+    <div class="ap-history" id="apHistory"></div>
+    <div class="ap-status" id="apStatus">idle</div>
+    <div class="ap-note">Independent of neurofeedback / Echo reward. Synthetic tests never claim physical detection. Single-device latency is not calibrated distance. See ACOUSTIC_PROBE.md.</div>
   </div>
 
   <div class="panel">
@@ -209,5 +255,8 @@
 <script src="neuro.js?v=20260919a"></script>
 <script src="hear.js?v=20260919a"></script>
 <script src="field-viz.js?v=20260919a"></script>
+<script src="acoustic-probe.js?v=20261102a"></script>
+<script src="acoustic-probe-ui.js?v=20261102a"></script>
+<script src="acoustic-probe-tests.js?v=20261102a"></script>
 </body>
 </html>
