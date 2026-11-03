@@ -1,0 +1,252 @@
+/* Acoustic Probe panel — additive styles, does not override SIGNAL·PROCESSOR core */
+
+.ap-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.ap-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.ap-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--phosphor);
+}
+
+.ap-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line-bright);
+  color: var(--text-dim);
+  background: var(--panel-2);
+}
+
+.ap-badge.live {
+  color: var(--phosphor);
+  border-color: var(--phosphor-dim);
+}
+
+.ap-badge.demo {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.ap-badge.error {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.ap-badge.idle {
+  color: var(--text-dim);
+}
+
+.ap-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.ap-controls .full {
+  grid-column: 1 / -1;
+}
+
+.ap-controls button {
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line-bright);
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.ap-controls button.primary {
+  background: rgba(125, 255, 178, 0.12);
+  color: var(--phosphor);
+  border-color: var(--phosphor-dim);
+}
+
+.ap-controls button.active {
+  background: rgba(255, 180, 84, 0.12);
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+.ap-controls button:disabled {
+  opacity: 0.4;
+}
+
+.ap-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.ap-field label {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+  min-width: 88px;
+}
+
+.ap-field input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 22px;
+  background: transparent;
+}
+
+.ap-field input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  background: var(--line-bright);
+  border-radius: 2px;
+}
+
+.ap-field input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  background: var(--phosphor);
+  border-radius: 50%;
+  border: 2px solid var(--panel);
+}
+
+.ap-field .val {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--phosphor);
+  min-width: 64px;
+  text-align: right;
+}
+
+.ap-meters {
+  margin: 10px 0;
+}
+
+.ap-meter-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+canvas#apWave,
+canvas#apLevel {
+  width: 100%;
+  display: block;
+  border-radius: 6px;
+  background: var(--panel-2);
+  margin-bottom: 6px;
+}
+
+canvas#apWave {
+  height: 48px;
+}
+
+canvas#apLevel {
+  height: 14px;
+}
+
+.ap-readout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  margin: 8px 0 10px;
+}
+
+.ap-readout .k {
+  color: var(--text-dim);
+}
+
+.ap-readout .v {
+  color: var(--phosphor);
+  text-align: right;
+}
+
+.ap-history {
+  max-height: 140px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.ap-history .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid rgba(34, 50, 43, 0.6);
+  padding: 3px 0;
+}
+
+.ap-history .row:last-child {
+  border-bottom: none;
+}
+
+.ap-history .emit {
+  color: var(--amber);
+}
+
+.ap-history .detection {
+  color: var(--phosphor);
+}
+
+.ap-history .synthetic {
+  color: #5b9cff;
+}
+
+.ap-history .miss {
+  color: var(--danger);
+}
+
+.ap-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  margin-top: 8px;
+  min-height: 1.3em;
+}
+
+.ap-status.warn {
+  color: var(--amber);
+}
+
+.ap-status.err {
+  color: var(--danger);
+}
+
+.ap-note {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  margin-top: 8px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  border: 1px dashed var(--line);
+}
