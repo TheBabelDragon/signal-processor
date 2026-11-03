@@ -61,8 +61,6 @@ It *can* ingest Echo `FieldObservation` as the reward signal. See [BRIDGE.md](BR
 
 Same JSON works for optical-body-s3.
 
-
-
 ## Acoustic Probe (v0.1)
 
 Independent browser-native acoustic probing subsystem.
@@ -78,6 +76,17 @@ Does **not** drive ultrasonic hardware, does **not** feed neurofeedback scoring,
 Docs: [ACOUSTIC_PROBE.md](ACOUSTIC_PROBE.md) · [ACOUSTIC_EVENT_SCHEMA.md](ACOUSTIC_EVENT_SCHEMA.md) · [ACOUSTIC_EXPERIMENT.md](ACOUSTIC_EXPERIMENT.md)
 
 Console tests: `AcousticProbeTests.runAll()`
+
+## Acoustic Transport (ESP32)
+
+Packet contract for independent acoustic anchors. Logical events are transport-independent; serial and WebSocket carry the same schema.
+
+- Doc: [ACOUSTIC_TRANSPORT.md](ACOUSTIC_TRANSPORT.md)
+- Schema: [schemas/acoustic_event.v2.schema.json](schemas/acoustic_event.v2.schema.json)
+- Bridge: `python tools/acoustic_bridge.py --stdin --port 8766`
+- Tests: `python tools/acoustic_transport_tests.py`
+
+**Clock rule:** shared `sequence` does not imply synchronized clocks. Cross-node TDoA requires `clock_uncertainty_us`.
 
 ## License
 
