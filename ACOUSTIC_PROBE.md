@@ -113,10 +113,11 @@ Interfaces are reserved (stubs only) for:
 | `acoustic-probe-tests.js` | Deterministic tests (no hardware) |
 | `ACOUSTIC_EVENT_SCHEMA.md` | Event field reference |
 | `ACOUSTIC_EXPERIMENT.md` | Local test procedure |
+| `ACOUSTIC_TRANSPORT.md` | ESP32 / multi-node packet contract |
 
 ## Next step toward multi-anchor self-localization
 
-1. Define a stable serial / WebSocket packet for ESP32 acoustic anchors.
-2. Publish probe schedule + node_id from each anchor.
-3. Collect TDOA observations with shared sequence IDs.
-4. Add a separate localization solver that consumes AcousticProbe events and never mutates the neurofeedback path.
+1. ~~Define a stable serial / WebSocket packet for ESP32 acoustic anchors.~~ → [ACOUSTIC_TRANSPORT.md](ACOUSTIC_TRANSPORT.md)
+2. Implement firmware on two ESP32 nodes emitting `tx` / `rx` events with independent `clock_id`s.
+3. Log independent observations through `tools/acoustic_bridge.py`; verify CRC / schema / clock refusal guards.
+4. Only after explicit `clock_uncertainty_us` binding, introduce a **separate** TDoA solver that never mutates neurofeedback.

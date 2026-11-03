@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thebabeldragon.github.io/signal-processor/schemas/acoustic_event.v2.schema.json",
+  "title": "AcousticEvent",
+  "description": "Transport-independent acoustic probe event (schema_version 2). Serial and WebSocket carry this object; framing is separate.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "event_type",
+    "node_id",
+    "boot_id",
+    "sequence",
+    "clock_id"
+  ],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 2 },
+    "event_id": { "type": ["string", "null"] },
+    "event_type": {
+      "type": "string",
+      "enum": ["hello", "status", "tx", "rx", "miss", "sync", "emit", "detection"]
+    },
+    "node_id": { "type": "string", "minLength": 1 },
+    "boot_id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "clock_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Local clock domain: typically node_id:boot_id. Same clock_id => same oscillator domain."
+    },
+    "sample_rate": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+    "sample_counter": { "type": ["integer", "null"], "minimum": 0 },
+    "tx_scheduled_at_us": { "type": ["integer", "null"] },
+    "tx_actual_at_us": { "type": ["integer", "null"] },
+    "rx_detected_at_us": { "type": ["integer", "null"] },
+    "clock_offset_estimate_us": {
+      "type": ["integer", "null"],
+      "description": "Estimated local - reference time. Null if unknown."
+    },
+    "clock_uncertainty_us": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Uncertainty bound on clock_offset_estimate_us. Null => TDoA must refuse."
+    },
+    "probe_id": { "type": ["string", "null"] },
+    "frequency_start_hz": { "type": ["number", "null"] },
+    "frequency_end_hz": { "type": ["number", "null"] },
+    "duration_ms": { "type": ["number", "null"] },
+    "correlation_peak": { "type": ["number", "null"] },
+    "confidence": { "type": ["number", "null"] },
+    "input_rms": { "type": ["number", "null"] },
+    "clipped": { "type": "boolean" },
+    "peer_node_id": { "type": ["string", "null"] },
+    "peer_boot_id": { "type": ["string", "null"] },
+    "peer_sequence": { "type": ["integer", "null"] },
+    "mode": {
+      "type": ["string", "null"],
+      "enum": ["live", "synthetic", "demo", "error", null]
+    },
+    "notes": { "type": ["string", "null"] }
+  },
+  "additionalProperties": true
+}

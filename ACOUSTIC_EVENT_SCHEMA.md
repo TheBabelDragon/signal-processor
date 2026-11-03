@@ -1,95 +1,85 @@
-# Acoustic Event Schema v1
+# Acoustic Event Schema
 
-Transport-independent, versioned event objects produced by AcousticProbe.
+Transport-independent, versioned event objects for acoustic probing.
+
+- **v1** — browser AcousticProbe (ms monotonic + wall clocks)
+- **v2** — ESP32 / multi-node transport (local µs clocks + identity domains)
+
+Serial and WebSocket carry the **same logical event**. Framing is defined in [ACOUSTIC_TRANSPORT.md](ACOUSTIC_TRANSPORT.md).
+
+---
+
+## Schema version 2 (hardware / multi-node)
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "event_id": "uuid",
-  "probe_id": "chirp-lf-v1",
-  "node_id": "browser-local",
-  "sequence": 1,
-  "event_type": "detection",
-  "emitted_at": 12345.67,
-  "detected_at": 12378.21,
-  "wall_emitted_at": 1730000000123,
-  "wall_detected_at": 1730000000156,
+  "event_type": "tx",
+  "node_id": "esp32-a1b2c3d4",
+  "boot_id": "7f3c9e2a-1b0d-4e55-9c11-88aa00bbccdd",
+  "sequence": 17,
+  "clock_id": "esp32-a1b2c3d4:7f3c9e2a-1b0d-4e55-9c11-88aa00bbccdd",
   "sample_rate": 48000,
-  "sample_offset": 412,
-  "estimated_latency_ms": 32.54,
+  "sample_counter": 129384000,
+  "tx_scheduled_at_us": 2695500000,
+  "tx_actual_at_us": 2695500125,
+  "rx_detected_at_us": null,
+  "clock_offset_estimate_us": null,
+  "clock_uncertainty_us": null,
+  "probe_id": "chirp-lf-v1",
   "frequency_start_hz": 1800,
   "frequency_end_hz": 4200,
   "duration_ms": 40,
-  "correlation_peak": 0.91,
-  "confidence": 0.91,
-  "input_rms": 0.0123,
+  "correlation_peak": null,
+  "confidence": null,
+  "input_rms": null,
   "clipped": false,
+  "peer_node_id": null,
+  "peer_boot_id": null,
+  "peer_sequence": null,
   "mode": "live",
   "notes": null
 }
 ```
 
-## Field reference
+### Identity
 
-| Field | Type | Source | Notes |
-|-------|------|--------|-------|
-| `schema_version` | number | fixed | Currently `1` |
-| `event_id` | string | generated | Unique per event |
-| `probe_id` | string | config | Template identity |
-| `node_id` | string | config | Local or future anchor ID |
-| `sequence` | number | monotonic | Emission sequence counter |
-| `event_type` | string | measured | `emit` · `detection` · `miss` |
-| `emitted_at` | number \| null | measured | Monotonic ms (`performance.now`) |
-| `detected_at` | number \| null | measured | Monotonic ms |
-| `wall_emitted_at` | number \| null | measured | Wall clock; not for Δt |
-| `wall_detected_at` | number \| null | measured | Wall clock; not for Δt |
-| `sample_rate` | number | measured | AudioContext / capture rate |
-| `sample_offset` | number \| null | measured | Correlation lag (samples) |
-| `estimated_latency_ms` | number \| null | **estimate** | `detected_at − emitted_at` when both known |
-| `frequency_start_hz` | number | config | Chirp start |
-| `frequency_end_hz` | number | config | Chirp end |
-| `duration_ms` | number | config | Chirp duration |
-| `correlation_peak` | number \| null | measured | Normalized cross-correlation peak |
-| `confidence` | number \| null | measured | Currently equal to peak (0–1) |
-| `input_rms` | number \| null | measured | Recent input RMS |
-| `clipped` | boolean | measured | Any sample near full-scale |
-| `mode` | string | measured | `live` · `synthetic` · `demo` · `error` |
-| `notes` | string \| null | optional | Human-readable caveat |
+| Field | Meaning |
+|-------|---------|
+| `node_id` | Persistent hardware identity |
+| `boot_id` | Unique per power-on session |
+| `sequence` | Monotonic counter within `(node_id, boot_id)` |
+| `clock_id` | Clock domain key, typically `node_id:boot_id` |
 
-## Measured vs estimated
+**Shared sequence numbers do not imply synchronized clocks.**
 
-**Directly measured**
+### Timing (local to `clock_id`)
 
-- Sample rate, correlation peak, confidence, input RMS, clipping
-- Monotonic emit / detect times
-- Sequence number and event identity
+| Field | Unit | Notes |
+|-------|------|-------|
+| `sample_counter` | samples | Hardware position |
+| `tx_scheduled_at_us` | µs | Intended TX |
+| `tx_actual_at_us` | µs | Measured TX |
+| `rx_detected_at_us` | µs | Measured detection on **this** node |
+| `clock_offset_estimate_us` | µs | Estimate only |
+| `clock_uncertainty_us` | µs | Required for cross-clock TDoA; null => refuse |
 
-**Estimated / approximate**
+Machine-readable: [schemas/acoustic_event.v2.schema.json](schemas/acoustic_event.v2.schema.json)
 
-- `estimated_latency_ms` — includes OS/audio-stack buffering, not pure acoustic flight time
-- Future TDOA / range / position fields (not present in v0.1)
+---
 
-## Event types
+## Schema version 1 (browser)
 
-| Type | Meaning |
-|------|---------|
-| `emit` | Local generation of a probe chirp |
-| `detection` | Template match above threshold |
-| `miss` | Synthetic or scheduled attempt that did not exceed threshold |
+Browser AcousticProbe events use `schema_version: 1` with `emitted_at` / `detected_at` in monotonic milliseconds.
 
-## Mode discipline
+| Field | Notes |
+|-------|-------|
+| `emitted_at` / `detected_at` | Monotonic ms (`performance.now`) |
+| `wall_*` | Wall clock; not for delta-t |
+| `estimated_latency_ms` | Full system latency estimate |
+| `mode: synthetic` | Never a physical detection |
 
-- `mode: "synthetic"` events are **never** physical microphone detections.
-- UI and consumers must treat synthetic and live streams as distinct.
-- No event in v0.1 claims calibrated distance or geographic position.
+### Transport
 
-## Transport
-
-Events are plain JSON-serializable objects. Compatible future transports:
-
-- In-page callbacks (`onEvent`)
-- WebSocket
-- SSE
-- Serial-connected ESP32 nodes (via a local bridge)
-
-Pages hosting remains static. A persistent server is not required for local mic experiments.
+Logical events only. Framing: [ACOUSTIC_TRANSPORT.md](ACOUSTIC_TRANSPORT.md).
