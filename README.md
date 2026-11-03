@@ -61,6 +61,24 @@ It *can* ingest Echo `FieldObservation` as the reward signal. See [BRIDGE.md](BR
 
 Same JSON works for optical-body-s3.
 
+
+
+## Acoustic Probe (v0.1)
+
+Independent browser-native acoustic probing subsystem.
+
+- Generates coded linear-frequency chirps (default 1.8–4.2 kHz).
+- Captures microphone input with explicit permission.
+- Detects probes via normalized cross-correlation.
+- Emits versioned events with sequence IDs and timing fields.
+- Dashboard panel: **ACOUSTIC PROBE** (synthetic test requires no hardware).
+
+Does **not** drive ultrasonic hardware, does **not** feed neurofeedback scoring, and does **not** claim geographic positioning.
+
+Docs: [ACOUSTIC_PROBE.md](ACOUSTIC_PROBE.md) · [ACOUSTIC_EVENT_SCHEMA.md](ACOUSTIC_EVENT_SCHEMA.md) · [ACOUSTIC_EXPERIMENT.md](ACOUSTIC_EXPERIMENT.md)
+
+Console tests: `AcousticProbeTests.runAll()`
+
 ## License
 
 MIT
