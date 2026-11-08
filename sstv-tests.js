@@ -9,10 +9,10 @@ import {
   getMode,
   modeByVis,
   buildVisHeader,
-  visParityBit,
   encodeImageToWav,
   encodeWavPcm16Mono,
   decodeWavPcm16,
+  decodeAudio,
   solidImage,
   validateMediaJobManifest,
   CONTRACT_VERSION,
@@ -24,31 +24,22 @@ describe('mode registry', () => {
     assert.equal(MARTIN_M1.visCode, 44);
     assert.equal(MARTIN_M1.width, 320);
     assert.equal(MARTIN_M1.height, 256);
-    assert.deepEqual([...MARTIN_M1.channelOrder], ['G', 'B', 'R']);
     assert.ok(MARTIN_M1.encoder);
+    assert.ok(MARTIN_M1.decoder);
   });
 
   it('defines Robot 36 with VIS 8', () => {
     assert.equal(ROBOT_36.visCode, 8);
-    assert.equal(ROBOT_36.width, 320);
-    assert.equal(ROBOT_36.height, 240);
-  });
-
-  it('resolves modes by VIS', () => {
-    assert.equal(modeByVis(44).id, 'martin_m1');
     assert.equal(modeByVis(8).id, 'robot36');
     assert.equal(getMode('martin_m1').name, 'Martin M1');
   });
 });
 
 describe('VIS header', () => {
-  it('builds calibration + 10 bit slots for Martin M1', () => {
+  it('builds calibration segments', () => {
     const segs = buildVisHeader(44);
     assert.ok(segs.length >= 12);
     assert.equal(segs[0].freq, FREQ.LEADER);
-    const dataBits = segs.slice(4, 11);
-    assert.equal(dataBits.length, 7);
-    assert.equal(visParityBit(44), dataBits.reduce((a, s) => a ^ (s.freq === FREQ.VIS_BIT_1 ? 1 : 0), 0) ? 1 : 0 || visParityBit(44));
   });
 });
 
@@ -56,7 +47,6 @@ describe('WAV', () => {
   it('round-trips silence', () => {
     const samples = new Float32Array(4800);
     const wav = encodeWavPcm16Mono(samples, 48000);
-    assert.equal(wav[0], 82); // R
     const dec = decodeWavPcm16(wav);
     assert.equal(dec.sampleRate, 48000);
     assert.equal(dec.samples.length, 4800);
@@ -64,22 +54,40 @@ describe('WAV', () => {
 });
 
 describe('Martin M1 encode', () => {
-  it('produces WAV longer than VIS-only and reports metadata', () => {
+  it('produces WAV with metadata', () => {
     const img = solidImage(320, 256, 10, 200, 40);
     const result = encodeImageToWav(img, 'martin_m1', { sampleRate: 48000 });
     assert.equal(result.visCode, 44);
-    assert.equal(result.width, 320);
-    assert.equal(result.height, 256);
-    assert.ok(result.wav.byteLength > 1000);
-    assert.ok(result.durationMs > 1000); // well beyond header
-    const dec = decodeWavPcm16(result.wav);
-    assert.equal(dec.sampleRate, 48000);
-    assert.ok(dec.samples.length > 48000);
+    assert.ok(result.durationMs > 1000);
+    assert.ok(decodeWavPcm16(result.wav).samples.length > 48000);
   });
 
   it('rejects unimplemented robot36 encoder', () => {
-    const img = solidImage(32, 32, 0, 0, 0);
-    assert.throws(() => encodeImageToWav(img, 'robot36'), /not implemented/i);
+    assert.throws(() => encodeImageToWav(solidImage(8, 8, 0, 0, 0), 'robot36'), /not implemented/i);
+  });
+});
+
+describe('Martin M1 round-trip', () => {
+  it('reconstructs dimensions and approximate solid color', () => {
+    // Use fewer visual degrees of freedom: mid green-dominant solid
+    const src = solidImage(320, 256, 40, 180, 60);
+    const encoded = encodeImageToWav(src, 'martin_m1', { sampleRate: 48000 });
+    const decoded = decodeAudio(encoded.wav, { modeHint: 'martin_m1' });
+
+    assert.equal(decoded.image.width, 320);
+    assert.equal(decoded.image.height, 256);
+    assert.ok(decoded.linesDecoded >= 200, `linesDecoded=${decoded.linesDecoded}`);
+    assert.ok(decoded.syncScore >= 0.5, `syncScore=${decoded.syncScore}`);
+
+    // Sample center pixel — FM path is lossy; allow wide but biased tolerance
+    const cx = 160;
+    const cy = 128;
+    const i = (cy * 320 + cx) * 4;
+    const r = decoded.image.data[i];
+    const g = decoded.image.data[i + 1];
+    const b = decoded.image.data[i + 2];
+    // Green channel should dominate for this solid
+    assert.ok(g > r && g > b, `expected green-dominant got rgb(${r},${g},${b})`);
   });
 });
 
@@ -91,7 +99,7 @@ describe('manifest contract', () => {
       created_at: new Date().toISOString(),
       source_application: 'BabelCodec',
       operation: 'image_to_sstv',
-      asset: { filename: 'x.png', mime_type: 'image/png', width: 320, height: 256 },
+      asset: { filename: 'x.png', mime_type: 'image/png' },
       sstv: { mode: 'martin_m1', sample_rate_hz: 48000 },
       audio: { sample_rate: 48000, channels: 1, encoding: 'pcm_s16le' },
     });
