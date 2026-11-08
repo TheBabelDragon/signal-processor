@@ -139,7 +139,8 @@ export function mountSstvPanel(root) {
         `lines ${decoded.linesDecoded}/${decoded.expectedLines}`,
         `sync ${decoded.syncScore.toFixed(2)}  incomplete ${decoded.incomplete}`,
         decoded.diagnostics?.note || '',
-      ].join('\n');\n      setStatus('Decode complete');
+      ].join('\n');
+      setStatus('Decode complete');
     } catch (e) {
       setErr(String(e.message || e));
       rxDiag.textContent = String(e.message || e);
