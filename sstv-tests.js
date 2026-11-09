@@ -17,6 +17,7 @@ import {
   validateMediaJobManifest,
   CONTRACT_VERSION,
   FREQ,
+  listEncodableModes,
 } from './sstv/index.js';
 
 describe('mode registry', () => {
@@ -28,10 +29,11 @@ describe('mode registry', () => {
     assert.ok(MARTIN_M1.decoder);
   });
 
-  it('defines Robot 36 with VIS 8', () => {
+  it('defines Robot 36 with VIS 8 and encoder enabled', () => {
     assert.equal(ROBOT_36.visCode, 8);
     assert.equal(modeByVis(8).id, 'robot36');
-    assert.equal(getMode('martin_m1').name, 'Martin M1');
+    assert.ok(ROBOT_36.encoder);
+    assert.ok(listEncodableModes().some((m) => m.id === 'robot36'));
   });
 });
 
@@ -61,15 +63,25 @@ describe('Martin M1 encode', () => {
     assert.ok(result.durationMs > 1000);
     assert.ok(decodeWavPcm16(result.wav).samples.length > 48000);
   });
+});
 
-  it('rejects unimplemented robot36 encoder', () => {
-    assert.throws(() => encodeImageToWav(solidImage(8, 8, 0, 0, 0), 'robot36'), /not implemented/i);
+describe('Robot 36 encode', () => {
+  it('produces shorter WAV than Martin M1 with VIS 8', () => {
+    const img = solidImage(320, 240, 40, 180, 60);
+    const result = encodeImageToWav(img, 'robot36', { sampleRate: 48000 });
+    assert.equal(result.visCode, 8);
+    assert.equal(result.width, 320);
+    assert.equal(result.height, 240);
+    // ~36s body + header — allow wide band
+    assert.ok(result.durationMs > 30000, `duration ${result.durationMs}`);
+    assert.ok(result.durationMs < 50000, `duration ${result.durationMs}`);
+    const dec = decodeWavPcm16(result.wav);
+    assert.equal(dec.sampleRate, 48000);
   });
 });
 
 describe('Martin M1 round-trip', () => {
   it('reconstructs dimensions and approximate solid color', () => {
-    // Use fewer visual degrees of freedom: mid green-dominant solid
     const src = solidImage(320, 256, 40, 180, 60);
     const encoded = encodeImageToWav(src, 'martin_m1', { sampleRate: 48000 });
     const decoded = decodeAudio(encoded.wav, { modeHint: 'martin_m1' });
@@ -79,14 +91,12 @@ describe('Martin M1 round-trip', () => {
     assert.ok(decoded.linesDecoded >= 200, `linesDecoded=${decoded.linesDecoded}`);
     assert.ok(decoded.syncScore >= 0.5, `syncScore=${decoded.syncScore}`);
 
-    // Sample center pixel — FM path is lossy; allow wide but biased tolerance
     const cx = 160;
     const cy = 128;
     const i = (cy * 320 + cx) * 4;
     const r = decoded.image.data[i];
     const g = decoded.image.data[i + 1];
     const b = decoded.image.data[i + 2];
-    // Green channel should dominate for this solid
     assert.ok(g > r && g > b, `expected green-dominant got rgb(${r},${g},${b})`);
   });
 });
@@ -100,7 +110,7 @@ describe('manifest contract', () => {
       source_application: 'BabelCodec',
       operation: 'image_to_sstv',
       asset: { filename: 'x.png', mime_type: 'image/png' },
-      sstv: { mode: 'martin_m1', sample_rate_hz: 48000 },
+      sstv: { mode: 'robot36', sample_rate_hz: 48000 },
       audio: { sample_rate: 48000, channels: 1, encoding: 'pcm_s16le' },
     });
     assert.equal(r.ok, true);

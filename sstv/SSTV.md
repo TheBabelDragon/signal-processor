@@ -6,15 +6,16 @@ Standalone SSTV encode/decode for the Signal Processor app.
 
 | Capability | State |
 |------------|-------|
-| Mode registry | Martin M1, Robot 36 defined |
+| Mode registry | Martin M1, Robot 36 |
 | Martin M1 encode | **Implemented** |
 | Martin M1 decode | **Implemented** (clean / lightly degraded path) |
-| Robot 36 encode/decode | Registry only |
+| Robot 36 encode | **Implemented** |
+| Robot 36 decode | Not yet |
 | WAV PCM s16le | Encode + decode |
-| UI panel | **Transmit / Receive** |
+| UI panel | Transmit / Receive |
 | BabelCodec contract v1 | Validator present |
 
-## Round-trip
+## Round-trip (Martin M1)
 
 ```js
 import { encodeImageToWav, decodeAudio, solidImage } from './sstv/index.js';
@@ -22,8 +23,9 @@ import { encodeImageToWav, decodeAudio, solidImage } from './sstv/index.js';
 const img = solidImage(320, 256, 40, 180, 60);
 const { wav } = encodeImageToWav(img, 'martin_m1', { sampleRate: 48000 });
 const decoded = decodeAudio(wav, { modeHint: 'martin_m1' });
-// decoded.image → { data, width, height }
 ```
+
+Robot 36 can be encoded the same way (`mode: 'robot36'`); decode still requires Martin path or an external decoder.
 
 Tests: `node --test sstv-tests.js`
 
