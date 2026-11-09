@@ -1,6 +1,6 @@
 # SIGNAL · PROCESSOR
 
-Binaural / isochronic / modulation processor plus a session loop — and an offline **SSTV** workstation.
+Binaural / isochronic / modulation processor plus a session loop — and an offline **SSTV signal-gen** workstation.
 
 **Live demo → [thebabeldragon.github.io/signal-processor](https://thebabeldragon.github.io/signal-processor/)** ✨
 
@@ -20,13 +20,19 @@ Already deployed: **[https://thebabeldragon.github.io/signal-processor/](https:/
 
 If deploys ever fail, check **Settings → Pages → Source → GitHub Actions** (one-time setup).
 
-## SSTV
+## SSTV · SIGNAL GEN
 
-Offline Martin M1 encode/decode (Robot 36 registered, not yet enabled).
+Offline Martin M1 and Robot 36 encode/decode (clean-path).
 
-- Transmit: image / test pattern → WAV (PCM s16le mono)
-- Receive: WAV → reconstructed PNG + diagnostics
-- Contract v1 handoff with [BabelCodec](https://github.com/TheBabelDragon/BabelCodec)
+**Transmit**
+- Load image or test pattern; optional BabelCodec `.job.json` manifest
+- Encode → progress bar → waveform → **Play** / **Stop** / download WAV
+
+**Receive**
+- Load WAV → waveform → play → decode → download PNG
+- Mode: Auto (VIS), Martin M1, or Robot 36
+
+Contract v1 handoff with [BabelCodec](https://github.com/TheBabelDragon/BabelCodec).
 
 Docs: [sstv/SSTV.md](sstv/SSTV.md) · [sstv/SSTV_MODES.md](sstv/SSTV_MODES.md)
 
