@@ -1,6 +1,6 @@
 # SIGNAL · PROCESSOR
 
-Binaural / isochronic / modulation processor plus a session loop.
+Binaural / isochronic / modulation processor plus a session loop — and an offline **SSTV** workstation.
 
 **Live demo → [thebabeldragon.github.io/signal-processor](https://thebabeldragon.github.io/signal-processor/)** ✨
 
@@ -20,6 +20,20 @@ Already deployed: **[https://thebabeldragon.github.io/signal-processor/](https:/
 
 If deploys ever fail, check **Settings → Pages → Source → GitHub Actions** (one-time setup).
 
+## SSTV
+
+Offline Martin M1 encode/decode (Robot 36 registered, not yet enabled).
+
+- Transmit: image / test pattern → WAV (PCM s16le mono)
+- Receive: WAV → reconstructed PNG + diagnostics
+- Contract v1 handoff with [BabelCodec](https://github.com/TheBabelDragon/BabelCodec)
+
+Docs: [sstv/SSTV.md](sstv/SSTV.md) · [sstv/SSTV_MODES.md](sstv/SSTV_MODES.md)
+
+Tests: `node --test sstv-tests.js`
+
+WAV export is **not** an over-the-air transmission. Observe applicable regulations if you later feed audio to a radio.
+
 ## Producer contract
 
 This app is the **stimulus**. Observation lives in optical-body-s3 / eeg-loop.
@@ -36,57 +50,15 @@ Loop: entrain (open) or reward (hold target when score is high).
 Polarity: reward high or inhibit high.
 Sensors: none, manual tap, mic stillness, Echo / FieldObservation.
 
-Incoming `health=partial` (optical dark isolation still CHARGE/FAULT) is not treated as a full reward.
-
-### Echo mode — visualizer + presets
-
-When sensor = `echo / field obs`, a live field panel shows **motion · drive · entropy · fuse** bars plus health / phase / isolation badges. Reward meter stays tied to the same scored stream.
-
-One-tap Echo presets (dashed chips under the band chips):
-
-| chip | what it sets |
-|------|----------------|
-| `echo · still α` | external sensor, reward-high, alpha, silence bed |
-| `echo · still SMR` | external, reward-high, SMR, pink bed |
-| `echo · move β` | external, **inhibit-high** (motion rewarded), beta |
-| `echo · entrain α` | external, open-loop entrain, alpha |
-
-Session log JSON now also records field snapshots (motion/drive/entropy/isolated).
-
-## Echo Grid — perchance not the array
-
-This tab does **not** drive ultrasonic emitters. Echo already has `--body --drive`.
-
-It *can* ingest Echo `FieldObservation` as the reward signal. See [BRIDGE.md](BRIDGE.md).
-
-Same JSON works for optical-body-s3.
-
 ## Acoustic Probe (v0.1)
 
-Independent browser-native acoustic probing subsystem.
+Independent browser-native acoustic probing subsystem. Does **not** share code paths with SSTV.
 
-- Generates coded linear-frequency chirps (default 1.8–4.2 kHz).
-- Captures microphone input with explicit permission.
-- Detects probes via normalized cross-correlation.
-- Emits versioned events with sequence IDs and timing fields.
-- Dashboard panel: **ACOUSTIC PROBE** (synthetic test requires no hardware).
-
-Does **not** drive ultrasonic hardware, does **not** feed neurofeedback scoring, and does **not** claim geographic positioning.
-
-Docs: [ACOUSTIC_PROBE.md](ACOUSTIC_PROBE.md) · [ACOUSTIC_EVENT_SCHEMA.md](ACOUSTIC_EVENT_SCHEMA.md) · [ACOUSTIC_EXPERIMENT.md](ACOUSTIC_EXPERIMENT.md)
-
-Console tests: `AcousticProbeTests.runAll()`
+Docs: [ACOUSTIC_PROBE.md](ACOUSTIC_PROBE.md)
 
 ## Acoustic Transport (ESP32)
 
-Packet contract for independent acoustic anchors. Logical events are transport-independent; serial and WebSocket carry the same schema.
-
-- Doc: [ACOUSTIC_TRANSPORT.md](ACOUSTIC_TRANSPORT.md)
-- Schema: [schemas/acoustic_event.v2.schema.json](schemas/acoustic_event.v2.schema.json)
-- Bridge: `python tools/acoustic_bridge.py --stdin --port 8766`
-- Tests: `python tools/acoustic_transport_tests.py`
-
-**Clock rule:** shared `sequence` does not imply synchronized clocks. Cross-node TDoA requires `clock_uncertainty_us`.
+Packet contract for independent acoustic anchors. See [ACOUSTIC_TRANSPORT.md](ACOUSTIC_TRANSPORT.md).
 
 ## License
 
