@@ -26,13 +26,16 @@ Offline Martin M1 and Robot 36 encode/decode (clean-path).
 
 **Transmit**
 - Load image or test pattern; optional BabelCodec `.job.json` manifest
-- Encode → progress bar → waveform → **Play** / **Stop** / download WAV
+- **START TRANSMIT** → encode + play audio (progress + countdown)
+- Encode only / Play / Download WAV
 
 **Receive**
-- Load WAV → waveform → play → decode → download PNG
+- **START RECEIVE** → browser mic capture (HTTPS/localhost) → **STOP & DECODE**
+- Cancel aborts capture without decoding
+- Or Load WAV → waveform → play → decode → download PNG
 - Mode: Auto (VIS), Martin M1, or Robot 36
 
-Contract v1 handoff with [BabelCodec](https://github.com/TheBabelDragon/BabelCodec).
+Mic and speaker paths are **not** RF. Contract v1 handoff with [BabelCodec](https://github.com/TheBabelDragon/BabelCodec).
 
 Docs: [sstv/SSTV.md](sstv/SSTV.md) · [sstv/SSTV_MODES.md](sstv/SSTV_MODES.md)
 
