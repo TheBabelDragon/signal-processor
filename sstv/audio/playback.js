@@ -4,7 +4,7 @@
  */
 
 /**
- * @returns {{ play: Function, stop: Function, isPlaying: Function, dispose: Function }}
+ * @returns {{ play: Function, stop: Function, isPlaying: Function, getProgress: Function, dispose: Function }}
  */
 export function createPlayback() {
   /** @type {AudioContext|null} */
@@ -14,6 +14,8 @@ export function createPlayback() {
   let playing = false;
   /** @type {Function|null} */
   let onEndedCb = null;
+  let startAt = 0;
+  let duration = 0;
 
   function ensureCtx() {
     if (!ctx) {
@@ -36,6 +38,7 @@ export function createPlayback() {
     if (c.state === 'suspended') await c.resume();
     const buf = c.createBuffer(1, samples.length, sampleRate);
     buf.copyToChannel(samples instanceof Float32Array ? samples : new Float32Array(samples), 0);
+    duration = buf.duration;
     source = c.createBufferSource();
     source.buffer = buf;
     source.connect(c.destination);
@@ -47,6 +50,7 @@ export function createPlayback() {
       onEndedCb = null;
       if (wasPlaying && cb) cb();
     };
+    startAt = c.currentTime;
     source.start(0);
     playing = true;
   }
@@ -66,10 +70,27 @@ export function createPlayback() {
       source = null;
     }
     playing = false;
+    duration = 0;
   }
 
   function isPlaying() {
     return playing;
+  }
+
+  /**
+   * @returns {{ playing: boolean, elapsed: number, duration: number, fraction: number }}
+   */
+  function getProgress() {
+    if (!playing || !ctx || duration <= 0) {
+      return { playing: false, elapsed: 0, duration, fraction: 0 };
+    }
+    const elapsed = Math.min(duration, Math.max(0, ctx.currentTime - startAt));
+    return {
+      playing: true,
+      elapsed,
+      duration,
+      fraction: duration > 0 ? elapsed / duration : 0,
+    };
   }
 
   function dispose() {
@@ -80,5 +101,5 @@ export function createPlayback() {
     }
   }
 
-  return { play, stop, isPlaying, dispose };
+  return { play, stop, isPlaying, getProgress, dispose };
 }
