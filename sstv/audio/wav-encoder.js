@@ -8,7 +8,7 @@
  * @returns {Uint8Array}
  */
 export function encodeWavPcm16Mono(samples, sampleRate) {
-  const sr = sampleRate === 44100 ? 44100 : 48000;
+  const sr = Math.max(8000, Math.min(192000, Math.round(Number(sampleRate) || 48000)));
   const numSamples = samples.length;
   const dataSize = numSamples * 2;
   const buffer = new ArrayBuffer(44 + dataSize);
