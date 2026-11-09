@@ -9,18 +9,19 @@ Standalone SSTV encode/decode + signal-gen dashboard UI.
 | Martin M1 encode/decode | Clean-path |
 | Robot 36 encode/decode | Clean-path |
 | WAV PCM s16le | Encode + decode |
-| Web Audio playback | Play / stop |
+| Web Audio playback | Play / stop + TX progress |
 | Waveform overview | Yes |
-| Encode progress | Yes |
+| START TRANSMIT | Encode + play audio |
+| START RECEIVE | Mic capture + decode |
 | Manifest import (contract v1) | Yes |
-| Mic live decode | Not in this milestone |
 
 ## Dashboard
 
-Panel title: **SSTV · SIGNAL GEN**
+**Transmit:** load image / test pattern / manifest → START TRANSMIT or Encode only → waveform → download WAV
 
-- **Transmit:** load image or test pattern, optional BabelCodec `.job.json`, encode, waveform, play, download WAV
-- **Receive:** load WAV, waveform, play, decode, download PNG
+**Receive:** START RECEIVE (mic) → STOP & DECODE, or Load WAV → reconstructed PNG
+
+Mic path requires HTTPS or localhost. Captured audio is browser microphone input — not a calibrated radio IF.
 
 ## Tests
 

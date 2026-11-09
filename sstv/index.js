@@ -7,6 +7,7 @@ export { encodeImageToWav } from './encoder/frame-encoder.js';
 export { encodeWavPcm16Mono } from './audio/wav-encoder.js';
 export { decodeWavPcm16 } from './audio/wav-decoder.js';
 export { createPlayback } from './audio/playback.js';
+export { createCapture } from './audio/capture.js';
 export { normalizeImage, solidImage } from './encoder/image-normalizer.js';
 export { decodeAudio } from './decoder/frame-decoder.js';
 export { decodeMartinM1 } from './decoder/martin-m1-decoder.js';
