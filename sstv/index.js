@@ -9,5 +9,6 @@ export { decodeWavPcm16 } from './audio/wav-decoder.js';
 export { normalizeImage, solidImage } from './encoder/image-normalizer.js';
 export { decodeAudio } from './decoder/frame-decoder.js';
 export { decodeMartinM1 } from './decoder/martin-m1-decoder.js';
+export { decodeRobot36 } from './decoder/robot36-decoder.js';
 export { detectVis } from './decoder/vis-decoder.js';
 export { validateMediaJobManifest, CONTRACT_VERSION } from './integration/manifest.js';

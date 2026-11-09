@@ -8,24 +8,22 @@ Standalone SSTV encode/decode for the Signal Processor app.
 |------------|-------|
 | Mode registry | Martin M1, Robot 36 |
 | Martin M1 encode | **Implemented** |
-| Martin M1 decode | **Implemented** (clean / lightly degraded path) |
+| Martin M1 decode | **Implemented** (clean path) |
 | Robot 36 encode | **Implemented** |
-| Robot 36 decode | Not yet |
+| Robot 36 decode | **Implemented** (clean path) |
 | WAV PCM s16le | Encode + decode |
 | UI panel | Transmit / Receive |
 | BabelCodec contract v1 | Validator present |
 
-## Round-trip (Martin M1)
+## Round-trip
 
 ```js
 import { encodeImageToWav, decodeAudio, solidImage } from './sstv/index.js';
 
-const img = solidImage(320, 256, 40, 180, 60);
-const { wav } = encodeImageToWav(img, 'martin_m1', { sampleRate: 48000 });
-const decoded = decodeAudio(wav, { modeHint: 'martin_m1' });
+const img = solidImage(320, 240, 40, 180, 60);
+const { wav } = encodeImageToWav(img, 'robot36', { sampleRate: 48000 });
+const decoded = decodeAudio(wav, { modeHint: 'robot36' });
 ```
-
-Robot 36 can be encoded the same way (`mode: 'robot36'`); decode still requires Martin path or an external decoder.
 
 Tests: `node --test sstv-tests.js`
 
@@ -35,4 +33,4 @@ SSTV does **not** use Acoustic Probe, neurofeedback, Echo isolation, or ESP32 ac
 
 ## Contract
 
-BabelCodec `docs/integrations/SIGNAL_PROCESSOR.md` · `contract_version: 1`.
+BabelCodec integration uses `contract_version: 1` (file-based handoff only).

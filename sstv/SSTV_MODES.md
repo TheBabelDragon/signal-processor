@@ -12,10 +12,7 @@
 | Scan | 146.432 ms per component |
 | Separator | 0.572 ms @ 1500 Hz after each component |
 | Line | 446.446 ms |
-| Approx duration | ~114 s + VIS header |
 | Encoder / Decoder | **Yes** / **Yes** (clean-path) |
-
-References: SSTV Handbook (Bruchanov); Martin timing tables.
 
 ## Robot 36
 
@@ -29,14 +26,9 @@ References: SSTV Handbook (Bruchanov); Martin timing tables.
 | Y scan | 88.0 ms |
 | Separator | 4.5 ms — **1500 Hz even (R-Y)** / **2300 Hz odd (B-Y)** |
 | Chroma porch | 1.5 ms @ 1900 Hz |
-| Chroma scan | 44.0 ms (one difference channel per line) |
+| Chroma scan | 44.0 ms |
 | Line | ~150 ms |
-| Approx duration | ~36 s + VIS header |
-| Encoder / Decoder | **Yes** / *not yet* |
-
-Chroma for each line is averaged with its pair neighbor (even↔odd).
-
-References: N7CXI Dayton paper; classic Robot documentation.
+| Encoder / Decoder | **Yes** / **Yes** (clean-path) |
 
 ## Frequency map
 

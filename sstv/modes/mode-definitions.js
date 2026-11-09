@@ -13,8 +13,8 @@ export const FREQ = Object.freeze({
   LEADER: 1900,
   BREAK: 1200,
   ROBOT_PORCH: 1900,
-  ROBOT_SEP_EVEN: 1500, // before R-Y
-  ROBOT_SEP_ODD: 2300, // before B-Y
+  ROBOT_SEP_EVEN: 1500,
+  ROBOT_SEP_ODD: 2300,
 });
 
 export function valueToFreq(v) {
@@ -43,12 +43,6 @@ export const MARTIN_M1 = Object.freeze({
   decoder: true,
 });
 
-/**
- * Robot 36 — VIS 8, 320×240, Y + alternating R-Y / B-Y
- * Line ≈ 150ms: sync 9 + porch 3 + Y 88 + sep 4.5 + porch 1.5 + chroma 44
- * Even lines: sep 1500 Hz + R-Y; odd lines: sep 2300 Hz + B-Y
- * (Dayton paper / classic Robot references)
- */
 export const ROBOT_36 = Object.freeze({
   id: 'robot36',
   name: 'Robot 36',
@@ -69,7 +63,7 @@ export const ROBOT_36 = Object.freeze({
   }),
   hasAltScan: true,
   encoder: true,
-  decoder: false,
+  decoder: true,
 });
 
 export const MODES = Object.freeze({

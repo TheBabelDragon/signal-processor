@@ -1,5 +1,6 @@
 import { decodeWavPcm16 } from '../audio/wav-decoder.js';
 import { decodeMartinM1 } from './martin-m1-decoder.js';
+import { decodeRobot36 } from './robot36-decoder.js';
 import { detectVis } from './vis-decoder.js';
 
 /**
@@ -29,6 +30,9 @@ export function decodeAudio(input, opts = {}) {
 
   if (modeHint === 'martin_m1') {
     return decodeMartinM1(samples, sampleRate, { modeHint });
+  }
+  if (modeHint === 'robot36') {
+    return decodeRobot36(samples, sampleRate, {});
   }
 
   throw new Error(`Decoder not implemented for mode: ${modeHint}`);
