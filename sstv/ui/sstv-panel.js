@@ -1,21 +1,25 @@
 /**
- * SSTV signal-gen dashboard — encode/decode + START TRANSMIT + waveform + manifest.
+ * SSTV signal-gen dashboard — TX/RX with START TRANSMIT + START RECEIVE.
  */
 import {
   encodeImageToWav,
   decodeAudio,
   decodeWavPcm16,
+  encodeWavPcm16Mono,
   listEncodableModes,
   listDecodableModes,
   validateMediaJobManifest,
 } from '../index.js';
 import { createPlayback } from '../audio/playback.js';
+import { createCapture } from '../audio/capture.js';
 import { drawWaveform } from './waveform.js';
+import { drawLevelMeter } from './level-meter.js';
 
 export function mountSstvPanel(root) {
   if (!root) return;
 
   const playback = createPlayback();
+  const capture = createCapture();
   /** @type {Float32Array|null} */
   let lastSamples = null;
   /** @type {number} */
@@ -26,8 +30,13 @@ export function mountSstvPanel(root) {
   let lastPng = null;
   /** @type {boolean} */
   let transmitting = false;
+  /** @type {boolean} */
+  let receiving = false;
   /** @type {number|null} */
   let progressRaf = null;
+  /** @type {number|null} */
+  let levelRaf = null;
+  let rxStartedAt = 0;
 
   root.innerHTML = '';
   root.classList.add('sstv-panel');
@@ -156,7 +165,6 @@ export function mountSstvPanel(root) {
   const stopTxBtn = btn('■ STOP');
   stopTxBtn.disabled = true;
   const encodeBtn = btn('Encode only');
-  encodeBtn.title = 'Prepare WAV without playing';
   const playBtn = btn('Play');
   playBtn.disabled = true;
   const dlWav = btn('Download WAV');
@@ -339,20 +347,135 @@ export function mountSstvPanel(root) {
     rxModeSel.appendChild(o);
   }
   rxModeField.appendChild(rxModeSel);
+
+  const rxLevel = el('canvas');
+  rxLevel.width = 440;
+  rxLevel.height = 14;
+  rxLevel.className = 'sstv-level';
+  const rxClock = el('div', 'sstv-clock');
+  rxClock.textContent = 'mic idle';
+
   const rxWave = el('canvas');
   rxWave.width = 640;
   rxWave.height = 64;
   rxWave.className = 'sstv-wave';
   const rxDiag = el('div', 'sstv-diag');
-  rxDiag.textContent = 'Load WAV from TRANSMIT or external clean SSTV recording.';
-  const rxAct = el('div', 'sstv-actions');
+  rxDiag.textContent =
+    'START RECEIVE uses the browser mic (HTTPS/localhost). Play SSTV from another device/speaker into the mic, then STOP & DECODE. Or Load WAV.';
+
+  const startRxBtn = btn('▶ START RECEIVE');
+  startRxBtn.classList.add('primary');
+  startRxBtn.title = 'Capture microphone until STOP & DECODE';
+  const stopRxBtn = btn('■ STOP & DECODE');
+  stopRxBtn.disabled = true;
   const rxPlay = btn('Play');
   rxPlay.disabled = true;
-  const rxStop = btn('Stop');
-  rxStop.disabled = true;
+  const rxStopPlay = btn('Stop play');
+  rxStopPlay.disabled = true;
+
+  function stopLevelLoop() {
+    if (levelRaf != null) {
+      cancelAnimationFrame(levelRaf);
+      levelRaf = null;
+    }
+  }
+
+  function startLevelLoop() {
+    stopLevelLoop();
+    const tick = () => {
+      if (!receiving) {
+        levelRaf = null;
+        return;
+      }
+      drawLevelMeter(rxLevel, capture.getLevel());
+      const elapsed = (performance.now() - rxStartedAt) / 1000;
+      rxClock.textContent = `RX ${fmtTime(elapsed)} · mic open`;
+      badge.textContent = `RX ${fmtTime(elapsed)}`;
+      badge.className = 'sstv-badge rx';
+      levelRaf = requestAnimationFrame(tick);
+    };
+    levelRaf = requestAnimationFrame(tick);
+  }
+
+  async function startReceive() {
+    try {
+      if (transmitting) stopTransmit();
+      playback.stop();
+      setBusy(true, 'RX ARM');
+      startRxBtn.disabled = true;
+      await capture.start({ sampleRateHint: 48000 });
+      receiving = true;
+      rxStartedAt = performance.now();
+      stopRxBtn.disabled = false;
+      startLevelLoop();
+      setStatus('Receiving mic…');
+      rxDiag.textContent = 'Mic open — play SSTV into the microphone, then STOP & DECODE.';
+    } catch (e) {
+      receiving = false;
+      startRxBtn.disabled = false;
+      stopRxBtn.disabled = true;
+      setErr(String(e.message || e));
+      rxDiag.textContent = String(e.message || e);
+      setBusy(false);
+    }
+  }
+
+  async function stopReceiveAndDecode() {
+    stopLevelLoop();
+    receiving = false;
+    stopRxBtn.disabled = true;
+    try {
+      setBusy(true, 'DECODING');
+      const cap = capture.stop();
+      lastSamples = cap.samples;
+      lastSr = cap.sampleRate;
+      lastWav = encodeWavPcm16Mono(cap.samples, cap.sampleRate);
+      drawWaveform(rxWave, lastSamples);
+      rxPlay.disabled = lastSamples.length === 0;
+      rxClock.textContent = `captured ${fmtTime(cap.durationMs / 1000)} @ ${cap.sampleRate} Hz`;
+
+      if (!lastSamples.length) {
+        throw new Error('No audio captured');
+      }
+
+      const hint = rxModeSel.value || undefined;
+      const decoded = decodeAudio(lastSamples, {
+        sampleRate: lastSr,
+        modeHint: hint,
+      });
+      drawImageData(rxCanvas, decoded.image);
+      lastPng = await imageToPngBytes(decoded.image);
+      dlPng.disabled = !lastPng;
+      rxDiag.textContent = [
+        `mode ${decoded.mode}  VIS ${decoded.visCode}`,
+        `lines ${decoded.linesDecoded}/${decoded.expectedLines}`,
+        `sync ${decoded.syncScore.toFixed(2)}  incomplete ${decoded.incomplete}`,
+        `captured ${(cap.durationMs / 1000).toFixed(1)}s @ ${cap.sampleRate} Hz`,
+        decoded.diagnostics?.note || '',
+        'Mic path is not RF — results depend on speaker/mic coupling and noise.',
+      ].join('\n');
+      setStatus('Decode complete');
+    } catch (e) {
+      setErr(String(e.message || e));
+      rxDiag.textContent = String(e.message || e);
+    } finally {
+      startRxBtn.disabled = false;
+      setBusy(false);
+    }
+  }
+
+  startRxBtn.addEventListener('click', () => startReceive());
+  stopRxBtn.addEventListener('click', () => stopReceiveAndDecode());
 
   const loadWav = fileBtn('Load WAV', 'audio/wav,audio/*,.wav', async (file) => {
     try {
+      if (receiving) {
+        stopLevelLoop();
+        capture.stop();
+        receiving = false;
+        stopRxBtn.disabled = true;
+        startRxBtn.disabled = false;
+      }
       setBusy(true, 'DECODING');
       const buf = new Uint8Array(await file.arrayBuffer());
       const pcm = decodeWavPcm16(buf);
@@ -381,28 +504,31 @@ export function mountSstvPanel(root) {
       setBusy(false);
     }
   });
+
   rxPlay.addEventListener('click', async () => {
     if (!lastSamples) return;
     try {
       await playback.play(lastSamples, lastSr, {
         onEnded: () => {
-          rxStop.disabled = true;
+          rxStopPlay.disabled = true;
           setStatus('Playback ended');
         },
       });
-      rxStop.disabled = false;
+      rxStopPlay.disabled = false;
       setStatus('Playing');
     } catch (e) {
       setErr(String(e.message || e));
     }
   });
-  rxStop.addEventListener('click', () => {
+  rxStopPlay.addEventListener('click', () => {
     playback.stop();
-    rxStop.disabled = true;
+    rxStopPlay.disabled = true;
     setStatus('Stopped');
   });
-  rxAct.append(loadWav, rxPlay, rxStop);
-  rxIn.append(rxModeField, rxWave, rxAct, rxDiag);
+
+  const rxAct = el('div', 'sstv-actions');
+  rxAct.append(startRxBtn, stopRxBtn, loadWav, rxPlay, rxStopPlay);
+  rxIn.append(rxModeField, rxLevel, rxClock, rxWave, rxAct, rxDiag);
 
   const rxOut = el('div', 'sstv-card');
   rxOut.appendChild(h3('RECONSTRUCTED'));
@@ -423,7 +549,7 @@ export function mountSstvPanel(root) {
 
   const note = el('div', 'sstv-note');
   note.textContent =
-    'START TRANSMIT plays SSTV over the browser audio path only — not a radio transmission. Independent of Acoustic Probe / neurofeedback. BabelCodec: Export SSTV handoff → import manifest + PNG here.';
+    'TX/RX use the browser audio path only — not radio. Mic receive needs HTTPS or localhost. Independent of Acoustic Probe / neurofeedback.';
 
   root.append(head, tabs, tx, rx, note);
 
@@ -443,18 +569,20 @@ export function mountSstvPanel(root) {
   function setBusy(on, label) {
     if (on) {
       badge.textContent = label || 'BUSY';
-      badge.className = label === 'TX AUDIO' ? 'sstv-badge tx' : 'sstv-badge busy';
-    } else if (!transmitting) {
+      if (label === 'TX AUDIO') badge.className = 'sstv-badge tx';
+      else if (String(label || '').startsWith('RX')) badge.className = 'sstv-badge rx';
+      else badge.className = 'sstv-badge busy';
+    } else if (!transmitting && !receiving) {
       badge.textContent = 'IDLE';
       badge.className = 'sstv-badge';
     }
-    startTxBtn.disabled = on && !transmitting;
-    encodeBtn.disabled = on && !transmitting;
+    startTxBtn.disabled = (on && !transmitting) || receiving;
+    encodeBtn.disabled = (on && !transmitting) || receiving;
   }
   function setStatus(msg) {
-    if (transmitting) {
-      badge.className = 'sstv-badge tx';
-    } else {
+    if (transmitting) badge.className = 'sstv-badge tx';
+    else if (receiving) badge.className = 'sstv-badge rx';
+    else {
       badge.textContent = 'OK';
       badge.className = 'sstv-badge ok';
     }
