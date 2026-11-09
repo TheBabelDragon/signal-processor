@@ -1,5 +1,5 @@
 /**
- * Browser Web Audio playback for Float32 or WAV-decoded mono buffers.
+ * Browser Web Audio playback for Float32 mono buffers.
  * Explicit user-gesture start; honest stopped state.
  */
 
@@ -12,6 +12,8 @@ export function createPlayback() {
   /** @type {AudioBufferSourceNode|null} */
   let source = null;
   let playing = false;
+  /** @type {Function|null} */
+  let onEndedCb = null;
 
   function ensureCtx() {
     if (!ctx) {
@@ -25,9 +27,11 @@ export function createPlayback() {
   /**
    * @param {Float32Array} samples
    * @param {number} sampleRate
+   * @param {{ onEnded?: Function }} [opts]
    */
-  async function play(samples, sampleRate) {
+  async function play(samples, sampleRate, opts = {}) {
     stop();
+    onEndedCb = typeof opts.onEnded === 'function' ? opts.onEnded : null;
     const c = ensureCtx();
     if (c.state === 'suspended') await c.resume();
     const buf = c.createBuffer(1, samples.length, sampleRate);
@@ -36,16 +40,22 @@ export function createPlayback() {
     source.buffer = buf;
     source.connect(c.destination);
     source.onended = () => {
+      const wasPlaying = playing;
       playing = false;
       source = null;
+      const cb = onEndedCb;
+      onEndedCb = null;
+      if (wasPlaying && cb) cb();
     };
     source.start(0);
     playing = true;
   }
 
   function stop() {
+    onEndedCb = null;
     if (source) {
       try {
+        source.onended = null;
         source.stop(0);
       } catch (_) {
         /* already stopped */

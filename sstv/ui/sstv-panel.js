@@ -1,5 +1,5 @@
 /**
- * SSTV signal-gen dashboard — encode/decode + playback + waveform + manifest.
+ * SSTV signal-gen dashboard — encode/decode + START TRANSMIT + waveform + manifest.
  */
 import {
   encodeImageToWav,
@@ -24,6 +24,8 @@ export function mountSstvPanel(root) {
   let lastWav = null;
   /** @type {Uint8Array|null} */
   let lastPng = null;
+  /** @type {boolean} */
+  let transmitting = false;
 
   root.innerHTML = '';
   root.classList.add('sstv-panel');
@@ -72,6 +74,7 @@ export function mountSstvPanel(root) {
       const m = v.manifest;
       if (m.sstv?.mode && modeSel.querySelector(`option[value="${m.sstv.mode}"]`)) {
         modeSel.value = m.sstv.mode;
+        applyModeCanvas();
       }
       if (m.audio?.sample_rate || m.sstv?.sample_rate_hz) {
         const sr = String(m.audio?.sample_rate || m.sstv.sample_rate_hz);
@@ -111,14 +114,15 @@ export function mountSstvPanel(root) {
     modeSel.appendChild(o);
   }
   modeField.appendChild(modeSel);
-  modeSel.addEventListener('change', () => {
+  function applyModeCanvas() {
     const m = listEncodableModes().find((x) => x.id === modeSel.value);
     if (m) {
       txCanvas.width = m.width;
       txCanvas.height = m.height;
       paintTestPattern(txCanvas);
     }
-  });
+  }
+  modeSel.addEventListener('change', applyModeCanvas);
 
   const srField = field('Sample rate');
   const srSel = el('select');
@@ -142,76 +146,133 @@ export function mountSstvPanel(root) {
   waveCanvas.height = 64;
   waveCanvas.className = 'sstv-wave';
 
-  const encodeBtn = btn('Encode');
-  encodeBtn.classList.add('primary');
+  const startTxBtn = btn('▶ START TRANSMIT');
+  startTxBtn.classList.add('primary');
+  startTxBtn.title = 'Encode image to SSTV and play audio (speaker/line-out — not RF)';
+  const stopTxBtn = btn('■ STOP');
+  stopTxBtn.disabled = true;
+  const encodeBtn = btn('Encode only');
+  encodeBtn.title = 'Prepare WAV without playing';
   const playBtn = btn('Play');
   playBtn.disabled = true;
-  const stopBtn = btn('Stop');
-  stopBtn.disabled = true;
   const dlWav = btn('Download WAV');
   dlWav.disabled = true;
   const txDiag = el('div', 'sstv-diag');
   txDiag.textContent =
-    'Encode offline · Play uses Web Audio · Import BabelCodec .job.json then load PNG.';
+    'START TRANSMIT = encode + play over Web Audio (not an RF transmission). Encode only prepares WAV.';
+
+  async function runEncode() {
+    progressBar.style.width = '0%';
+    playback.stop();
+    transmitting = false;
+    playBtn.disabled = true;
+    stopTxBtn.disabled = true;
+    const img = canvasToImage(txCanvas);
+    const result = encodeImageToWav(img, modeSel.value, {
+      sampleRate: Number(srSel.value) || 48000,
+      onProgress: (p) => {
+        progressBar.style.width = Math.round(p * 100) + '%';
+      },
+    });
+    lastWav = result.wav;
+    lastSr = result.sampleRate;
+    const decoded = decodeWavPcm16(result.wav);
+    lastSamples = decoded.samples;
+    drawWaveform(waveCanvas, lastSamples);
+    progressBar.style.width = '100%';
+    dlWav.disabled = false;
+    playBtn.disabled = false;
+    txDiag.textContent = [
+      `mode ${result.mode}  VIS ${result.visCode}`,
+      `${result.width}×${result.height}  lines ${result.lineCount}`,
+      `sr ${result.sampleRate}  duration ${(result.durationMs / 1000).toFixed(1)}s`,
+      `wav ${result.wav.byteLength} bytes`,
+    ].join('\n');
+    return result;
+  }
+
+  async function startTransmit() {
+    try {
+      setBusy(true, 'ENCODING');
+      startTxBtn.disabled = true;
+      encodeBtn.disabled = true;
+      await runEncode();
+      setBusy(true, 'TX AUDIO');
+      transmitting = true;
+      stopTxBtn.disabled = false;
+      await playback.play(lastSamples, lastSr, {
+        onEnded: () => {
+          transmitting = false;
+          stopTxBtn.disabled = true;
+          startTxBtn.disabled = false;
+          encodeBtn.disabled = false;
+          setStatus('Transmit complete (audio ended)');
+        },
+      });
+      setStatus('Transmitting audio…');
+    } catch (e) {
+      transmitting = false;
+      setErr(String(e.message || e));
+      txDiag.textContent = String(e.message || e);
+      startTxBtn.disabled = false;
+      encodeBtn.disabled = false;
+      stopTxBtn.disabled = true;
+      setBusy(false);
+    }
+  }
+
+  function stopTransmit() {
+    playback.stop();
+    transmitting = false;
+    stopTxBtn.disabled = true;
+    startTxBtn.disabled = false;
+    encodeBtn.disabled = false;
+    setStatus('Transmit stopped');
+    setBusy(false);
+  }
+
+  startTxBtn.addEventListener('click', () => startTransmit());
+  stopTxBtn.addEventListener('click', () => stopTransmit());
 
   encodeBtn.addEventListener('click', async () => {
     try {
       setBusy(true, 'ENCODING');
-      progressBar.style.width = '0%';
-      playback.stop();
-      playBtn.disabled = true;
-      stopBtn.disabled = true;
-      const img = canvasToImage(txCanvas);
-      const result = encodeImageToWav(img, modeSel.value, {
-        sampleRate: Number(srSel.value) || 48000,
-        onProgress: (p) => {
-          progressBar.style.width = Math.round(p * 100) + '%';
-        },
-      });
-      lastWav = result.wav;
-      lastSr = result.sampleRate;
-      const decoded = decodeWavPcm16(result.wav);
-      lastSamples = decoded.samples;
-      drawWaveform(waveCanvas, lastSamples);
-      progressBar.style.width = '100%';
-      dlWav.disabled = false;
-      playBtn.disabled = false;
-      txDiag.textContent = [
-        `mode ${result.mode}  VIS ${result.visCode}`,
-        `${result.width}×${result.height}  lines ${result.lineCount}`,
-        `sr ${result.sampleRate}  duration ${(result.durationMs / 1000).toFixed(1)}s`,
-        `wav ${result.wav.byteLength} bytes`,
-      ].join('\n');
+      startTxBtn.disabled = true;
+      await runEncode();
       setStatus('Encode complete');
     } catch (e) {
       setErr(String(e.message || e));
       txDiag.textContent = String(e.message || e);
     } finally {
       setBusy(false);
+      startTxBtn.disabled = false;
     }
   });
 
   playBtn.addEventListener('click', async () => {
     if (!lastSamples) return;
     try {
-      await playback.play(lastSamples, lastSr);
-      stopBtn.disabled = false;
+      transmitting = true;
+      stopTxBtn.disabled = false;
+      await playback.play(lastSamples, lastSr, {
+        onEnded: () => {
+          transmitting = false;
+          stopTxBtn.disabled = true;
+          setStatus('Playback ended');
+        },
+      });
       setStatus('Playing');
     } catch (e) {
       setErr(String(e.message || e));
     }
   });
-  stopBtn.addEventListener('click', () => {
-    playback.stop();
-    stopBtn.disabled = true;
-    setStatus('Stopped');
-  });
+
   dlWav.addEventListener('click', () => {
     if (lastWav) download(lastWav, `sstv-${modeSel.value || 'out'}.wav`, 'audio/wav');
   });
 
   const txAct = el('div', 'sstv-actions');
-  txAct.append(encodeBtn, playBtn, stopBtn, dlWav);
+  txAct.append(startTxBtn, stopTxBtn, encodeBtn, playBtn, dlWav);
   txCtl.append(modeField, srField, progress, waveCanvas, txAct, txDiag);
   txGrid.append(txSrc, txCtl);
   tx.appendChild(txGrid);
@@ -278,7 +339,12 @@ export function mountSstvPanel(root) {
   rxPlay.addEventListener('click', async () => {
     if (!lastSamples) return;
     try {
-      await playback.play(lastSamples, lastSr);
+      await playback.play(lastSamples, lastSr, {
+        onEnded: () => {
+          rxStop.disabled = true;
+          setStatus('Playback ended');
+        },
+      });
       rxStop.disabled = false;
       setStatus('Playing');
     } catch (e) {
@@ -312,7 +378,7 @@ export function mountSstvPanel(root) {
 
   const note = el('div', 'sstv-note');
   note.textContent =
-    'SSTV signal-gen dashboard · independent of Acoustic Probe / neurofeedback. WAV is not an RF transmission. BabelCodec: Export SSTV handoff → import manifest + PNG here.';
+    'START TRANSMIT plays SSTV over the browser audio path only — not a radio transmission. Independent of Acoustic Probe / neurofeedback. BabelCodec: Export SSTV handoff → import manifest + PNG here.';
 
   root.append(head, tabs, tx, rx, note);
 
@@ -330,13 +396,24 @@ export function mountSstvPanel(root) {
   });
 
   function setBusy(on, label) {
-    badge.textContent = on ? label || 'BUSY' : 'IDLE';
-    badge.className = 'sstv-badge' + (on ? ' busy' : '');
-    encodeBtn.disabled = on;
+    if (on) {
+      badge.textContent = label || 'BUSY';
+      badge.className = 'sstv-badge busy';
+    } else if (!transmitting) {
+      badge.textContent = 'IDLE';
+      badge.className = 'sstv-badge';
+    }
+    startTxBtn.disabled = on && !transmitting;
+    encodeBtn.disabled = on && !transmitting;
   }
   function setStatus(msg) {
-    badge.textContent = 'OK';
-    badge.className = 'sstv-badge ok';
+    if (transmitting) {
+      badge.textContent = 'TX AUDIO';
+      badge.className = 'sstv-badge busy';
+    } else {
+      badge.textContent = 'OK';
+      badge.className = 'sstv-badge ok';
+    }
     badge.title = msg;
   }
   function setErr(msg) {
