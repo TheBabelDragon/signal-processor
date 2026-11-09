@@ -1,7 +1,12 @@
 /**
  * SSTV workstation panel — ES module, no coupling to Acoustic Probe.
  */
-import { encodeImageToWav, decodeAudio, solidImage, listEncodableModes, MARTIN_M1 } from '../index.js';
+import {
+  encodeImageToWav,
+  decodeAudio,
+  listEncodableModes,
+  listDecodableModes,
+} from '../index.js';
 
 export function mountSstvPanel(root) {
   if (!root) return;
@@ -71,7 +76,10 @@ export function mountSstvPanel(root) {
   modeField.appendChild(modeSel);
   const srField = field('Sample rate');
   const srSel = el('select');
-  for (const [v, t] of [[48000, '48 kHz'], [44100, '44.1 kHz']]) {
+  for (const [v, t] of [
+    [48000, '48 kHz'],
+    [44100, '44.1 kHz'],
+  ]) {
     const o = el('option');
     o.value = String(v);
     o.textContent = t;
@@ -83,7 +91,7 @@ export function mountSstvPanel(root) {
   const dlWav = btn('Download WAV');
   dlWav.disabled = true;
   const txDiag = el('div', 'sstv-diag');
-  txDiag.textContent = 'Martin M1 ≈ 114s + VIS header. Encoding runs fully offline.';
+  txDiag.textContent = 'Martin M1 ≈ 114s · Robot 36 ≈ 36s (+ VIS). Fully offline.';
   let lastWav = null;
   encodeBtn.addEventListener('click', async () => {
     try {
@@ -110,7 +118,7 @@ export function mountSstvPanel(root) {
   });
   dlWav.addEventListener('click', () => {
     if (!lastWav) return;
-    download(lastWav, 'sstv-martin-m1.wav', 'audio/wav');
+    download(lastWav, `sstv-${modeSel.value || 'out'}.wav`, 'audio/wav');
   });
   const txAct = el('div', 'sstv-actions');
   txAct.append(encodeBtn, dlWav);
@@ -122,15 +130,29 @@ export function mountSstvPanel(root) {
   const rxGrid = el('div', 'sstv-grid');
   const rxIn = el('div', 'sstv-card');
   rxIn.appendChild(h3('AUDIO IN'));
+  const rxModeField = field('Decode mode');
+  const rxModeSel = el('select');
+  const autoOpt = el('option');
+  autoOpt.value = '';
+  autoOpt.textContent = 'Auto (VIS)';
+  rxModeSel.appendChild(autoOpt);
+  for (const m of listDecodableModes()) {
+    const o = el('option');
+    o.value = m.id;
+    o.textContent = `${m.name} · VIS ${m.visCode}`;
+    rxModeSel.appendChild(o);
+  }
+  rxModeField.appendChild(rxModeSel);
   const rxDiag = el('div', 'sstv-diag');
-  rxDiag.textContent = 'Import a WAV produced by TRANSMIT (or compatible Martin M1).';
+  rxDiag.textContent = 'Import WAV from TRANSMIT. Auto uses VIS; or force Martin M1 / Robot 36.';
   const rxAct = el('div', 'sstv-actions');
   let lastPng = null;
   const loadWav = fileBtn('Load WAV', 'audio/wav,audio/*,.wav', async (file) => {
     try {
       setBusy(true, 'DECODING');
       const buf = new Uint8Array(await file.arrayBuffer());
-      const decoded = decodeAudio(buf, { modeHint: 'martin_m1' });
+      const hint = rxModeSel.value || undefined;
+      const decoded = decodeAudio(buf, hint ? { modeHint: hint } : {});
       drawImageData(rxCanvas, decoded.image);
       lastPng = await imageToPngBytes(decoded.image);
       dlPng.disabled = !lastPng;
@@ -149,7 +171,7 @@ export function mountSstvPanel(root) {
     }
   });
   rxAct.append(loadWav);
-  rxIn.append(rxAct, rxDiag);
+  rxIn.append(rxModeField, rxAct, rxDiag);
 
   const rxOut = el('div', 'sstv-card');
   rxOut.appendChild(h3('RECONSTRUCTED'));
@@ -258,7 +280,7 @@ export function mountSstvPanel(root) {
     }
     ctx.fillStyle = '#fff';
     ctx.font = '16px monospace';
-    ctx.fillText('Martin M1 test', 12, 28);
+    ctx.fillText('SSTV test', 12, 28);
   }
 
   function canvasToImage(canvas) {
@@ -271,7 +293,11 @@ export function mountSstvPanel(root) {
     canvas.width = image.width;
     canvas.height = image.height;
     const ctx = canvas.getContext('2d');
-    const id = new ImageData(image.data instanceof Uint8ClampedArray ? image.data : new Uint8ClampedArray(image.data), image.width, image.height);
+    const id = new ImageData(
+      image.data instanceof Uint8ClampedArray ? image.data : new Uint8ClampedArray(image.data),
+      image.width,
+      image.height
+    );
     ctx.putImageData(id, 0, 0);
   }
 
