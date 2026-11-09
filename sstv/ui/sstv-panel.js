@@ -26,6 +26,8 @@ export function mountSstvPanel(root) {
   let lastPng = null;
   /** @type {boolean} */
   let transmitting = false;
+  /** @type {number|null} */
+  let progressRaf = null;
 
   root.innerHTML = '';
   root.classList.add('sstv-panel');
@@ -140,6 +142,8 @@ export function mountSstvPanel(root) {
   const progress = el('div', 'sstv-progress');
   const progressBar = el('i');
   progress.appendChild(progressBar);
+  const clock = el('div', 'sstv-clock');
+  clock.textContent = '—';
 
   const waveCanvas = el('canvas');
   waveCanvas.width = 640;
@@ -161,8 +165,42 @@ export function mountSstvPanel(root) {
   txDiag.textContent =
     'START TRANSMIT = encode + play over Web Audio (not an RF transmission). Encode only prepares WAV.';
 
+  function fmtTime(sec) {
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, '0')}`;
+  }
+
+  function stopProgressLoop() {
+    if (progressRaf != null) {
+      cancelAnimationFrame(progressRaf);
+      progressRaf = null;
+    }
+  }
+
+  function startProgressLoop() {
+    stopProgressLoop();
+    const tick = () => {
+      const p = playback.getProgress();
+      if (!p.playing) {
+        progressRaf = null;
+        return;
+      }
+      progressBar.style.width = Math.round(p.fraction * 100) + '%';
+      const left = Math.max(0, p.duration - p.elapsed);
+      clock.textContent = `TX ${fmtTime(p.elapsed)} / ${fmtTime(p.duration)}  ·  −${fmtTime(left)}`;
+      badge.textContent = `TX ${fmtTime(left)}`;
+      badge.className = 'sstv-badge tx';
+      progressRaf = requestAnimationFrame(tick);
+    };
+    progressRaf = requestAnimationFrame(tick);
+  }
+
   async function runEncode() {
+    stopProgressLoop();
     progressBar.style.width = '0%';
+    clock.textContent = 'encoding…';
     playback.stop();
     transmitting = false;
     playBtn.disabled = true;
@@ -180,6 +218,7 @@ export function mountSstvPanel(root) {
     lastSamples = decoded.samples;
     drawWaveform(waveCanvas, lastSamples);
     progressBar.style.width = '100%';
+    clock.textContent = `ready · ${fmtTime(result.durationMs / 1000)} frame`;
     dlWav.disabled = false;
     playBtn.disabled = false;
     txDiag.textContent = [
@@ -189,6 +228,17 @@ export function mountSstvPanel(root) {
       `wav ${result.wav.byteLength} bytes`,
     ].join('\n');
     return result;
+  }
+
+  function onAudioEnded(msg) {
+    stopProgressLoop();
+    transmitting = false;
+    stopTxBtn.disabled = true;
+    startTxBtn.disabled = false;
+    encodeBtn.disabled = false;
+    progressBar.style.width = '100%';
+    clock.textContent = 'complete';
+    setStatus(msg);
   }
 
   async function startTransmit() {
@@ -201,16 +251,12 @@ export function mountSstvPanel(root) {
       transmitting = true;
       stopTxBtn.disabled = false;
       await playback.play(lastSamples, lastSr, {
-        onEnded: () => {
-          transmitting = false;
-          stopTxBtn.disabled = true;
-          startTxBtn.disabled = false;
-          encodeBtn.disabled = false;
-          setStatus('Transmit complete (audio ended)');
-        },
+        onEnded: () => onAudioEnded('Transmit complete (audio ended)'),
       });
+      startProgressLoop();
       setStatus('Transmitting audio…');
     } catch (e) {
+      stopProgressLoop();
       transmitting = false;
       setErr(String(e.message || e));
       txDiag.textContent = String(e.message || e);
@@ -222,11 +268,13 @@ export function mountSstvPanel(root) {
   }
 
   function stopTransmit() {
+    stopProgressLoop();
     playback.stop();
     transmitting = false;
     stopTxBtn.disabled = true;
     startTxBtn.disabled = false;
     encodeBtn.disabled = false;
+    clock.textContent = 'stopped';
     setStatus('Transmit stopped');
     setBusy(false);
   }
@@ -255,12 +303,9 @@ export function mountSstvPanel(root) {
       transmitting = true;
       stopTxBtn.disabled = false;
       await playback.play(lastSamples, lastSr, {
-        onEnded: () => {
-          transmitting = false;
-          stopTxBtn.disabled = true;
-          setStatus('Playback ended');
-        },
+        onEnded: () => onAudioEnded('Playback ended'),
       });
+      startProgressLoop();
       setStatus('Playing');
     } catch (e) {
       setErr(String(e.message || e));
@@ -273,7 +318,7 @@ export function mountSstvPanel(root) {
 
   const txAct = el('div', 'sstv-actions');
   txAct.append(startTxBtn, stopTxBtn, encodeBtn, playBtn, dlWav);
-  txCtl.append(modeField, srField, progress, waveCanvas, txAct, txDiag);
+  txCtl.append(modeField, srField, progress, clock, waveCanvas, txAct, txDiag);
   txGrid.append(txSrc, txCtl);
   tx.appendChild(txGrid);
 
@@ -398,7 +443,7 @@ export function mountSstvPanel(root) {
   function setBusy(on, label) {
     if (on) {
       badge.textContent = label || 'BUSY';
-      badge.className = 'sstv-badge busy';
+      badge.className = label === 'TX AUDIO' ? 'sstv-badge tx' : 'sstv-badge busy';
     } else if (!transmitting) {
       badge.textContent = 'IDLE';
       badge.className = 'sstv-badge';
@@ -408,8 +453,7 @@ export function mountSstvPanel(root) {
   }
   function setStatus(msg) {
     if (transmitting) {
-      badge.textContent = 'TX AUDIO';
-      badge.className = 'sstv-badge busy';
+      badge.className = 'sstv-badge tx';
     } else {
       badge.textContent = 'OK';
       badge.className = 'sstv-badge ok';
