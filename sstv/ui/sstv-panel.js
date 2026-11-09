@@ -361,13 +361,16 @@ export function mountSstvPanel(root) {
   rxWave.className = 'sstv-wave';
   const rxDiag = el('div', 'sstv-diag');
   rxDiag.textContent =
-    'START RECEIVE uses the browser mic (HTTPS/localhost). Play SSTV from another device/speaker into the mic, then STOP & DECODE. Or Load WAV.';
+    'START RECEIVE uses the browser mic (HTTPS/localhost). Play SSTV from another device/speaker into the mic, then STOP & DECODE. Cancel aborts without decode. Or Load WAV.';
 
   const startRxBtn = btn('▶ START RECEIVE');
   startRxBtn.classList.add('primary');
   startRxBtn.title = 'Capture microphone until STOP & DECODE';
   const stopRxBtn = btn('■ STOP & DECODE');
   stopRxBtn.disabled = true;
+  const cancelRxBtn = btn('Cancel');
+  cancelRxBtn.disabled = true;
+  cancelRxBtn.title = 'Abort capture without decoding';
   const rxPlay = btn('Play');
   rxPlay.disabled = true;
   const rxStopPlay = btn('Stop play');
@@ -407,13 +410,15 @@ export function mountSstvPanel(root) {
       receiving = true;
       rxStartedAt = performance.now();
       stopRxBtn.disabled = false;
+      cancelRxBtn.disabled = false;
       startLevelLoop();
       setStatus('Receiving mic…');
-      rxDiag.textContent = 'Mic open — play SSTV into the microphone, then STOP & DECODE.';
+      rxDiag.textContent = 'Mic open — play SSTV into the microphone, then STOP & DECODE (or Cancel).';
     } catch (e) {
       receiving = false;
       startRxBtn.disabled = false;
       stopRxBtn.disabled = true;
+      cancelRxBtn.disabled = true;
       setErr(String(e.message || e));
       rxDiag.textContent = String(e.message || e);
       setBusy(false);
@@ -424,6 +429,7 @@ export function mountSstvPanel(root) {
     stopLevelLoop();
     receiving = false;
     stopRxBtn.disabled = true;
+    cancelRxBtn.disabled = true;
     try {
       setBusy(true, 'DECODING');
       const cap = capture.stop();
@@ -434,7 +440,7 @@ export function mountSstvPanel(root) {
       rxPlay.disabled = lastSamples.length === 0;
       rxClock.textContent = `captured ${fmtTime(cap.durationMs / 1000)} @ ${cap.sampleRate} Hz`;
 
-      if (!lastSamples.length) {
+      if (!lastSamples.length) pen {
         throw new Error('No audio captured');
       }
 
@@ -464,8 +470,24 @@ export function mountSstvPanel(root) {
     }
   }
 
+  function cancelReceive() {
+    if (!receiving) return;
+    stopLevelLoop();
+    receiving = false;
+    capture.stop();
+    stopRxBtn.disabled = true;
+    cancelRxBtn.disabled = true;
+    startRxBtn.disabled = false;
+    rxClock.textContent = 'cancelled';
+    drawLevelMeter(rxLevel, 0);
+    setStatus('Receive cancelled');
+    setBusy(false);
+    rxDiag.textContent = 'Capture cancelled — nothing decoded.';
+  }
+
   startRxBtn.addEventListener('click', () => startReceive());
   stopRxBtn.addEventListener('click', () => stopReceiveAndDecode());
+  cancelRxBtn.addEventListener('click', () => cancelReceive());
 
   const loadWav = fileBtn('Load WAV', 'audio/wav,audio/*,.wav', async (file) => {
     try {
@@ -474,6 +496,7 @@ export function mountSstvPanel(root) {
         capture.stop();
         receiving = false;
         stopRxBtn.disabled = true;
+        cancelRxBtn.disabled = true;
         startRxBtn.disabled = false;
       }
       setBusy(true, 'DECODING');
@@ -527,7 +550,7 @@ export function mountSstvPanel(root) {
   });
 
   const rxAct = el('div', 'sstv-actions');
-  rxAct.append(startRxBtn, stopRxBtn, loadWav, rxPlay, rxStopPlay);
+  rxAct.append(startRxBtn, stopRxBtn, cancelRxBtn, loadWav, rxPlay, rxStopPlay);
   rxIn.append(rxModeField, rxLevel, rxClock, rxWave, rxAct, rxDiag);
 
   const rxOut = el('div', 'sstv-card');
