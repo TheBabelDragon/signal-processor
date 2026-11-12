@@ -1,16 +1,19 @@
 /**
- * Robot 36 encoder — Y / R-Y / B-Y with alternating chroma lines.
+ * Robot 36 encoder — absolute boundaries, continuous phase, verified Y/R-Y/B-Y.
  */
 
 import { ROBOT_36, FREQ, valueToFreq } from '../modes/mode-definitions.js';
 import { buildVisHeader } from './vis.js';
-import { synthesizeSegments, concatFloat32 } from '../audio/waveform.js';
+import { concatFloat32, synthesizeSegments } from '../audio/waveform.js';
 import { normalizeImage } from './image-normalizer.js';
+import {
+  buildLinePlan,
+  synthesizeScanFromBounds,
+  synthesizeToneSamples,
+} from '../dsp/sample-timing.js';
 
-/** BT.601-style components in 0..1 */
-function rgbToRobot(r, g, b) {
+export function rgbToRobot(r, g, b) {
   const y = 0.299 * r + 0.587 * g + 0.114 * b;
-  // R-Y, B-Y centered at 0.5 for FM mapping (0 = black/green, 1 = full deviation)
   const ry = (r - y) * 0.5 + 0.5;
   const by = (b - y) * 0.5 + 0.5;
   return {
@@ -20,21 +23,32 @@ function rgbToRobot(r, g, b) {
   };
 }
 
+export function robotToRgb(y, ry01, by01) {
+  const ry = (ry01 - 0.5) * 2;
+  const by = (by01 - 0.5) * 2;
+  const r = y + ry;
+  const b = y + by;
+  const g = (y - 0.299 * r - 0.114 * b) / 0.587;
+  return {
+    r: clamp01(r),
+    g: clamp01(g),
+    b: clamp01(b),
+  };
+}
+
 function clamp01(v) {
   return Math.max(0, Math.min(1, v));
 }
 
-/**
- * @param {{ data: Uint8ClampedArray|Uint8Array, width: number, height: number }} image
- * @param {{ sampleRate?: number, onProgress?: Function, signal?: AbortSignal }} [opts]
- */
 export function encodeRobot36(image, opts = {}) {
   const sampleRate = opts.sampleRate === 44100 ? 44100 : 48000;
   const mode = ROBOT_36;
-  const img = normalizeImage(image, mode.width, mode.height);
+  const img = normalizeImage(image, mode.width, mode.height, {
+    fit: opts.fit || 'stretch',
+  });
+  const plan = buildLinePlan(mode.timing, mode.width, sampleRate, 'robot');
   const parts = [];
   let phase = 0;
-  const t = mode.timing;
 
   const check = () => {
     if (opts.signal?.aborted) {
@@ -44,7 +58,6 @@ export function encodeRobot36(image, opts = {}) {
     }
   };
 
-  // Precompute Y / R-Y / B-Y planes
   const Y = new Float32Array(mode.width * mode.height);
   const RY = new Float32Array(mode.width * mode.height);
   const BY = new Float32Array(mode.width * mode.height);
@@ -56,63 +69,47 @@ export function encodeRobot36(image, opts = {}) {
     BY[i] = c.by;
   }
 
-  // VIS
   check();
   let r = synthesizeSegments(buildVisHeader(mode.visCode), sampleRate, { phase });
   parts.push(r.samples);
   phase = r.phase;
 
-  const yPxMs = t.yScanMs / mode.width;
-  const cPxMs = t.chromaScanMs / mode.width;
-
   for (let y = 0; y < mode.height; y++) {
     check();
     if (opts.onProgress) opts.onProgress((y + 1) / mode.height);
 
-    // sync + porch
-    r = synthesizeSegments(
-      [
-        { freq: FREQ.SYNC, ms: t.syncPulseMs },
-        { freq: FREQ.BLACK, ms: t.syncPorchMs },
-      ],
-      sampleRate,
-      { phase }
-    );
+    r = synthesizeToneSamples(FREQ.SYNC, plan.syncSamples, sampleRate, phase);
+    parts.push(r.samples);
+    phase = r.phase;
+    r = synthesizeToneSamples(FREQ.BLACK, plan.porchSamples, sampleRate, phase);
     parts.push(r.samples);
     phase = r.phase;
 
-    // Y scan
-    const ySegs = [];
-    for (let x = 0; x < mode.width; x++) {
-      ySegs.push({ freq: valueToFreq(Y[y * mode.width + x]), ms: yPxMs });
-    }
-    r = synthesizeSegments(ySegs, sampleRate, { phase });
+    const yVals = Y.subarray(y * mode.width, (y + 1) * mode.width);
+    r = synthesizeScanFromBounds(yVals, plan.yBounds, sampleRate, phase, valueToFreq);
     parts.push(r.samples);
     phase = r.phase;
 
-    // Separator: even → 1500 (R-Y), odd → 2300 (B-Y)
     const even = y % 2 === 0;
-    r = synthesizeSegments(
-      [
-        { freq: even ? FREQ.ROBOT_SEP_EVEN : FREQ.ROBOT_SEP_ODD, ms: t.sepPulseMs },
-        { freq: FREQ.ROBOT_PORCH, ms: t.chromaPorchMs },
-      ],
+    r = synthesizeToneSamples(
+      even ? FREQ.ROBOT_SEP_EVEN : FREQ.ROBOT_SEP_ODD,
+      plan.sepSamples,
       sampleRate,
-      { phase }
+      phase
     );
     parts.push(r.samples);
     phase = r.phase;
+    r = synthesizeToneSamples(FREQ.ROBOT_PORCH, plan.cPorchSamples, sampleRate, phase);
+    parts.push(r.samples);
+    phase = r.phase;
 
-    // Chroma: average this line with neighbor when available
     const y2 = even ? Math.min(mode.height - 1, y + 1) : Math.max(0, y - 1);
     const plane = even ? RY : BY;
-    const cSegs = [];
+    const cVals = new Float32Array(mode.width);
     for (let x = 0; x < mode.width; x++) {
-      const a = plane[y * mode.width + x];
-      const b = plane[y2 * mode.width + x];
-      cSegs.push({ freq: valueToFreq((a + b) * 0.5), ms: cPxMs });
+      cVals[x] = (plane[y * mode.width + x] + plane[y2 * mode.width + x]) * 0.5;
     }
-    r = synthesizeSegments(cSegs, sampleRate, { phase });
+    r = synthesizeScanFromBounds(cVals, plan.cBounds, sampleRate, phase, valueToFreq);
     parts.push(r.samples);
     phase = r.phase;
   }
@@ -127,5 +124,6 @@ export function encodeRobot36(image, opts = {}) {
     height: mode.height,
     durationMs: (samples.length / sampleRate) * 1000,
     lineCount: mode.height,
+    plan,
   };
 }
