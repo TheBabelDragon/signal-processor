@@ -1,20 +1,24 @@
 /**
- * Martin M1 encoder — full frame to Float32 mono samples.
+ * Martin M1 encoder — absolute sample boundaries, continuous phase.
  */
 
 import { MARTIN_M1, FREQ, valueToFreq } from '../modes/mode-definitions.js';
 import { buildVisHeader } from './vis.js';
-import { synthesizeSegments, concatFloat32 } from '../audio/waveform.js';
+import { concatFloat32, synthesizeSegments } from '../audio/waveform.js';
 import { normalizeImage } from './image-normalizer.js';
+import {
+  buildLinePlan,
+  synthesizeScanFromBounds,
+  synthesizeToneSamples,
+} from '../dsp/sample-timing.js';
 
-/**
- * @param {{ data: Uint8ClampedArray|Uint8Array, width: number, height: number }} image
- * @param {{ sampleRate?: number, onProgress?: Function, signal?: AbortSignal }} [opts]
- */
 export function encodeMartinM1(image, opts = {}) {
   const sampleRate = opts.sampleRate === 44100 ? 44100 : 48000;
   const mode = MARTIN_M1;
-  const img = normalizeImage(image, mode.width, mode.height);
+  const img = normalizeImage(image, mode.width, mode.height, {
+    fit: opts.fit || 'stretch',
+  });
+  const plan = buildLinePlan(mode.timing, mode.width, sampleRate, 'martin');
   const parts = [];
   let phase = 0;
 
@@ -26,47 +30,34 @@ export function encodeMartinM1(image, opts = {}) {
     }
   };
 
-  // VIS header
   check();
-  const vis = buildVisHeader(mode.visCode);
-  let r = synthesizeSegments(vis, sampleRate, { phase });
+  let r = synthesizeSegments(buildVisHeader(mode.visCode), sampleRate, { phase });
   parts.push(r.samples);
   phase = r.phase;
-
-  const t = mode.timing;
-  const pxTimeMs = t.scanMs / mode.width;
 
   for (let y = 0; y < mode.height; y++) {
     check();
     if (opts.onProgress) opts.onProgress((y + 1) / mode.height);
 
-    // sync + porch
-    r = synthesizeSegments(
-      [
-        { freq: FREQ.SYNC, ms: t.syncPulseMs },
-        { freq: FREQ.BLACK, ms: t.syncPorchMs },
-      ],
-      sampleRate,
-      { phase }
-    );
+    r = synthesizeToneSamples(FREQ.SYNC, plan.syncSamples, sampleRate, phase);
+    parts.push(r.samples);
+    phase = r.phase;
+    r = synthesizeToneSamples(FREQ.BLACK, plan.porchSamples, sampleRate, phase);
     parts.push(r.samples);
     phase = r.phase;
 
     for (const ch of mode.channelOrder) {
-      const segs = [];
+      const values = new Float32Array(mode.width);
       for (let x = 0; x < mode.width; x++) {
         const i = (y * mode.width + x) * 4;
-        let v = 0;
-        if (ch === 'R') v = img.data[i] / 255;
-        else if (ch === 'G') v = img.data[i + 1] / 255;
-        else v = img.data[i + 2] / 255;
-        segs.push({ freq: valueToFreq(v), ms: pxTimeMs });
+        if (ch === 'R') values[x] = img.data[i] / 255;
+        else if (ch === 'G') values[x] = img.data[i + 1] / 255;
+        else values[x] = img.data[i + 2] / 255;
       }
-      r = synthesizeSegments(segs, sampleRate, { phase });
+      r = synthesizeScanFromBounds(values, plan.bounds, sampleRate, phase, valueToFreq);
       parts.push(r.samples);
       phase = r.phase;
-      // separator
-      r = synthesizeSegments([{ freq: FREQ.BLACK, ms: t.sepPulseMs }], sampleRate, { phase });
+      r = synthesizeToneSamples(FREQ.BLACK, plan.sepSamples, sampleRate, phase);
       parts.push(r.samples);
       phase = r.phase;
     }
@@ -82,5 +73,6 @@ export function encodeMartinM1(image, opts = {}) {
     height: mode.height,
     durationMs: (samples.length / sampleRate) * 1000,
     lineCount: mode.height,
+    plan,
   };
 }
