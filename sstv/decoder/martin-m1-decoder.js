@@ -5,7 +5,7 @@
 import { MARTIN_M1 } from '../modes/mode-definitions.js';
 import { detectVis } from './vis-decoder.js';
 import { buildLinePlan } from '../dsp/sample-timing.js';
-import { demodulateToValues, samplePixels } from '../dsp/fm-demod.js';
+import { demodulateToValues, samplePixels, recommendedPostFilterHz } from '../dsp/fm-demod.js';
 import { acquireFirstSync, findSyncNear, LineTimingTracker } from '../dsp/sync.js';
 
 export function decodeMartinM1(samples, sampleRate, opts = {}) {
@@ -22,9 +22,13 @@ export function decodeMartinM1(samples, sampleRate, opts = {}) {
     }
   }
 
-  const { values, delaySamples } = demodulateToValues(samples, sr, {
-    postFilterHz: 700,
+  const pixelSamples = plan.scanSamples / mode.width;
+  const postHz = opts.postFilterHz ?? recommendedPostFilterHz(pixelSamples, sr);
+
+  const { values, delaySamples, iqAligned } = demodulateToValues(samples, sr, {
+    postFilterHz: postHz,
     minAmp: 0.015,
+    measureDelay: opts.measureDelay ?? true,
   });
 
   const width = mode.width;
@@ -51,20 +55,17 @@ export function decodeMartinM1(samples, sampleRate, opts = {}) {
     let lineConf = 0;
     if (sync.score > 0.05) {
       const upd = tracker.update(sync.index, expectedSync, sync.score);
-      pos = sync.index;
+      if (upd.accepted) {
+        pos = sync.index;
+        syncHits++;
+      }
       lineConf = upd.confidence;
-      syncHits++;
     }
 
     let scanBase = pos + plan.syncSamples + plan.porchSamples;
     const channels = { G: null, B: null, R: null };
     for (const ch of mode.channelOrder) {
-      const pixelVals = samplePixels(
-        values,
-        scanBase + delaySamples,
-        plan.bounds,
-        'center60'
-      );
+      const pixelVals = samplePixels(values, scanBase + delaySamples, plan.bounds, 'center50');
       channels[ch] = pixelVals;
       scanBase += plan.scanSamples + plan.sepSamples;
     }
@@ -88,6 +89,7 @@ export function decodeMartinM1(samples, sampleRate, opts = {}) {
     pos = Math.round(tracker.nextExpected(pos));
   }
 
+  const alignment = tracker.alignmentReport();
   const incomplete = linesDecoded < height;
   return {
     image: { data: rgba, width, height },
@@ -100,13 +102,20 @@ export function decodeMartinM1(samples, sampleRate, opts = {}) {
     incomplete,
     sampleRate: sr,
     lineDiagnostics,
+    alignment,
     diagnostics: {
       visConfidence: visInfo?.confidence ?? null,
       decoder: 'martin_m1_v2',
       demodDelay: delaySamples,
+      postFilterHz: postHz,
+      iqAligned,
+      geometricallyAligned: alignment.geometricallyAligned,
+      driftPpm: alignment.driftPpm,
       note: incomplete
         ? 'Partial frame — not all scanlines recovered'
-        : 'Full frame recovered (continuous FM demod)',
+        : alignment.geometricallyAligned
+          ? 'Full frame recovered (continuous FM demod, geometry OK)'
+          : 'Full frame recovered — geometry confidence low',
     },
   };
 }
