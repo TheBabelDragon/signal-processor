@@ -4,6 +4,9 @@
 
 import { estimateFreq } from '../decoder/tone-estimator.js';
 
+const MIN_SYNC_SCORE = 0.05;
+const REJECT_SCORE = 0.03;
+
 export function scoreSync(samples, index, syncLen, sampleRate) {
   if (index < 0 || index + syncLen > samples.length) {
     return { index, score: 0, freq: 0 };
@@ -45,7 +48,7 @@ export function acquireFirstSync(samples, from, syncLen, sampleRate, maxSearchMs
     const s = scoreSync(samples, i, syncLen, sampleRate);
     if (s.score > best.score) best = s;
   }
-  return best.score > 0.05 ? best : null;
+  return best.score > MIN_SYNC_SCORE ? best : null;
 }
 
 export class LineTimingTracker {
@@ -57,29 +60,69 @@ export class LineTimingTracker {
     this.phaseErrorEma = 0;
     this.confidence = 0;
     this.history = [];
+    this.lastAccepted = null;
+    this.periodEma = nominalLineSamples;
+    this.driftPpm = 0;
+    this.accepted = 0;
+    this.rejected = 0;
   }
 
   update(detectedIndex, expectedIndex, score) {
-    const err = detectedIndex - expectedIndex;
-    this.phaseErrorEma = 0.7 * this.phaseErrorEma + 0.3 * err;
-    if (score > 0.1) {
-      this.lineSamples = 0.95 * this.lineSamples + 0.05 * (this.lineSamples + err);
-      const maxDev = this.nominal * 0.02;
-      if (this.lineSamples > this.nominal + maxDev) this.lineSamples = this.nominal + maxDev;
-      if (this.lineSamples < this.nominal - maxDev) this.lineSamples = this.nominal - maxDev;
+    if (score < REJECT_SCORE) {
+      this.rejected++;
+      this.confidence = Math.max(0, this.confidence * 0.85);
+      return {
+        accepted: false,
+        confidence: this.confidence,
+        lineSamples: this.lineSamples,
+        phaseError: 0,
+        driftPpm: this.driftPpm,
+      };
     }
-    this.confidence = 0.8 * this.confidence + 0.2 * Math.min(1, score * 2);
-    this.history.push({ detectedIndex, expectedIndex, err, score });
+
+    const err = detectedIndex - expectedIndex;
+    this.phaseErrorEma = this.phaseErrorEma * 0.7 + err * 0.3;
+
+    if (this.lastAccepted != null) {
+      const period = detectedIndex - this.lastAccepted;
+      if (period > this.nominal * 0.85 && period < this.nominal * 1.15) {
+        this.periodEma = this.periodEma * 0.85 + period * 0.15;
+        this.lineSamples = this.periodEma;
+        this.driftPpm = ((this.periodEma - this.nominal) / this.nominal) * 1e6;
+      }
+    }
+
+    this.lineSamples = this.periodEma + this.phaseErrorEma * 0.15;
+    this.confidence = Math.min(1, this.confidence * 0.9 + score * 0.25);
+    this.lastAccepted = detectedIndex;
+    this.accepted++;
+    this.history.push({ detectedIndex, expectedIndex, score, err });
     if (this.history.length > 32) this.history.shift();
+
     return {
-      correctedIndex: detectedIndex,
-      lineSamples: this.lineSamples,
-      phaseError: this.phaseErrorEma,
+      accepted: true,
       confidence: this.confidence,
+      lineSamples: this.lineSamples,
+      phaseError: err,
+      driftPpm: this.driftPpm,
     };
   }
 
-  nextExpected(from) {
-    return from + this.lineSamples;
+  nextExpected(currentSyncIndex) {
+    return currentSyncIndex + this.lineSamples;
+  }
+
+  alignmentReport() {
+    const ppm = this.driftPpm;
+    const aligned = this.accepted >= 8 && Math.abs(ppm) < 500 && this.confidence > 0.2;
+    return {
+      geometricallyAligned: aligned,
+      acceptedSyncs: this.accepted,
+      rejectedSyncs: this.rejected,
+      estimatedLineSamples: this.lineSamples,
+      nominalLineSamples: this.nominal,
+      driftPpm: ppm,
+      confidence: this.confidence,
+    };
   }
 }
