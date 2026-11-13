@@ -23,7 +23,7 @@ export function decodeMartinM1(samples, sampleRate, opts = {}) {
   }
 
   const { values, delaySamples } = demodulateToValues(samples, sr, {
-    postFilterHz: 600,
+    postFilterHz: 700,
     minAmp: 0.015,
   });
 
