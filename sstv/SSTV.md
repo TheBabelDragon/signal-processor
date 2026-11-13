@@ -25,7 +25,7 @@ Image → normalize (stretch|contain|cover)
       → WAV / Web Audio / capture
       → continuous FM demod (Hilbert → phase-diff IF)
       → sync acquisition + line timing tracker
-      → pixel sample at absolute bounds (center 60%)
+      → pixel sample at absolute bounds (center ~50%)
       → image + diagnostics
 ```
 
@@ -42,7 +42,7 @@ Encoder and decoder share `buildLinePlan()` so scan sample counts match exactly 
 
 ### Demodulation
 
-Primary path: continuous instantaneous-frequency estimate (analytic signal via Hilbert FIR, phase-difference frequency, light post-filter). Short-window Goertzel remains available as a diagnostic/fallback in `tone-estimator.js`.
+Primary path: continuous instantaneous-frequency estimate (analytic signal via Hilbert FIR, phase-difference frequency, light post-filter). `delaySamples` includes Hilbert group delay plus a fraction of post-filter lag so pixel windows align with the transmission timeline. Short-window Goertzel remains available as a diagnostic/fallback in `tone-estimator.js`.
 
 ### Synchronization
 
@@ -66,7 +66,10 @@ Mic path requires HTTPS or localhost. Captured audio is browser microphone input
 ```bash
 node --test sstv-tests.js
 node --test sstv-fidelity-tests.js
+node --test sstv-stress-tests.js
 ```
+
+Interop vectors: `node tools/sstv-export-vectors.js [outDir]`
 
 See [SSTV_FIDELITY.md](./SSTV_FIDELITY.md) for measured targets, limitations, and interoperability notes.
 
