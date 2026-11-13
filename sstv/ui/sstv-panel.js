@@ -1,5 +1,5 @@
 /**
- * SSTV signal-gen dashboard — TX/RX with START TRANSMIT + START RECEIVE.
+ * SSTV signal-gen dashboard — TX/RX with START TRANSMIT + START RECEIVE + FIDELITY lab.
  */
 import {
   encodeImageToWav,
@@ -9,9 +9,12 @@ import {
   listEncodableModes,
   listDecodableModes,
   validateMediaJobManifest,
+  normalizeImage,
+  getMode,
 } from '../index.js';
 import { createPlayback } from '../audio/playback.js';
 import { createCapture } from '../audio/capture.js';
+import { computeFidelityMetrics, differenceHeatmap } from '../dsp/metrics.js';
 import { drawWaveform } from './waveform.js';
 import { drawLevelMeter } from './level-meter.js';
 
@@ -29,6 +32,11 @@ export function mountSstvPanel(root) {
   let progressRaf = null;
   let levelRaf = null;
   let rxStartedAt = 0;
+  let sourceImage = null;
+  let lastNormalized = null;
+  let lastDecodedImage = null;
+  let lastMetrics = null;
+  let diffGain = 4;
 
   root.innerHTML = '';
   root.classList.add('sstv-panel');
@@ -43,12 +51,18 @@ export function mountSstvPanel(root) {
   const tabs = el('div', 'sstv-tabs');
   const tabTx = btn('TRANSMIT');
   const tabRx = btn('RECEIVE');
+  const tabLab = btn('FIDELITY');
   tabTx.classList.add('active');
-  tabs.append(tabTx, tabRx);
+  tabs.append(tabTx, tabRx, tabLab);
 
   const tx = el('div', 'sstv-view');
   const rx = el('div', 'sstv-view');
+  const lab = el('div', 'sstv-view');
   rx.hidden = true;
+  lab.hidden = true;
+
+  let labSrcMeta = null;
+  let labFitSel = null;
 
   const txGrid = el('div', 'sstv-grid');
   const txSrc = el('div', 'sstv-card');
@@ -58,14 +72,18 @@ export function mountSstvPanel(root) {
   txCanvas.height = 256;
   txCanvas.className = 'sstv-preview';
   paintTestPattern(txCanvas);
+  sourceImage = canvasToImage(txCanvas);
   const txActions = el('div', 'sstv-actions');
   const loadImg = fileBtn('Load image', 'image/*', async (file) => {
     const bmp = await createImageBitmap(file);
-    const ctx = txCanvas.getContext('2d');
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, txCanvas.width, txCanvas.height);
-    ctx.drawImage(bmp, 0, 0, txCanvas.width, txCanvas.height);
-    setStatus('Image loaded');
+    const off = document.createElement('canvas');
+    off.width = bmp.width;
+    off.height = bmp.height;
+    off.getContext('2d').drawImage(bmp, 0, 0);
+    sourceImage = canvasToImage(off);
+    paintSourceOntoTx();
+    setStatus('Image loaded · ' + bmp.width + '×' + bmp.height);
+    if (labSrcMeta) labSrcMeta.textContent = 'source ' + bmp.width + '×' + bmp.height;
   });
   const loadManifest = fileBtn('Import manifest', 'application/json,.json', async (file) => {
     try {
@@ -98,6 +116,7 @@ export function mountSstvPanel(root) {
   const testPat = btn('Test pattern');
   testPat.addEventListener('click', () => {
     paintTestPattern(txCanvas);
+    sourceImage = canvasToImage(txCanvas);
     setStatus('Test pattern');
   });
   txActions.append(loadImg, loadManifest, testPat);
@@ -114,13 +133,21 @@ export function mountSstvPanel(root) {
     modeSel.appendChild(o);
   }
   modeField.appendChild(modeSel);
-  function applyModeCanvas() {
+  function paintSourceOntoTx() {
     const m = listEncodableModes().find((x) => x.id === modeSel.value);
-    if (m) {
-      txCanvas.width = m.width;
-      txCanvas.height = m.height;
+    if (!m) return;
+    txCanvas.width = m.width;
+    txCanvas.height = m.height;
+    if (sourceImage) {
+      const fit = (labFitSel && labFitSel.value) || 'stretch';
+      const norm = normalizeImage(sourceImage, m.width, m.height, { fit });
+      drawImageData(txCanvas, norm);
+    } else {
       paintTestPattern(txCanvas);
     }
+  }
+  function applyModeCanvas() {
+    paintSourceOntoTx();
   }
   modeSel.addEventListener('change', applyModeCanvas);
 
@@ -510,22 +537,176 @@ export function mountSstvPanel(root) {
   rxGrid.append(rxIn, rxOut);
   rx.appendChild(rxGrid);
 
-  const note = el('div', 'sstv-note');
-  note.textContent = 'TX/RX use browser audio only — not radio. Mic needs HTTPS or localhost.';
-  root.append(head, tabs, tx, rx, note);
+  // FIDELITY LAB
+  const labGrid = el('div', 'sstv-grid-3');
+  const labSrcCard = el('div', 'sstv-card');
+  labSrcCard.appendChild(h3('SOURCE · NORMALIZED'));
+  const labSrcCanvas = el('canvas');
+  labSrcCanvas.width = 320;
+  labSrcCanvas.height = 256;
+  labSrcCanvas.className = 'sstv-preview';
+  labSrcMeta = el('div', 'sstv-diag');
+  labSrcMeta.textContent = 'No source — load image on TRANSMIT or use test pattern.';
+  const fitField = field('Aspect fit');
+  labFitSel = el('select');
+  for (const [v, t] of [['stretch', 'Stretch'], ['contain', 'Contain'], ['cover', 'Cover']]) {
+    const o = el('option');
+    o.value = v;
+    o.textContent = t;
+    labFitSel.appendChild(o);
+  }
+  fitField.appendChild(labFitSel);
+  labFitSel.addEventListener('change', () => paintSourceOntoTx());
+  labSrcCard.append(labSrcCanvas, fitField, labSrcMeta);
 
-  tabTx.addEventListener('click', () => {
-    tabTx.classList.add('active');
-    tabRx.classList.remove('active');
-    tx.hidden = false;
-    rx.hidden = true;
+  const labTxCard = el('div', 'sstv-card');
+  labTxCard.appendChild(h3('TRANSMISSION'));
+  const labWave = el('canvas');
+  labWave.width = 640;
+  labWave.height = 64;
+  labWave.className = 'sstv-wave';
+  const labTxMeta = el('div', 'sstv-diag');
+  labTxMeta.textContent = 'Run FIDELITY ROUND-TRIP to encode.';
+  labTxCard.append(labWave, labTxMeta);
+
+  const labRxCard = el('div', 'sstv-card');
+  labRxCard.appendChild(h3('RECONSTRUCTION'));
+  const labRxCanvas = el('canvas');
+  labRxCanvas.width = 320;
+  labRxCanvas.height = 256;
+  labRxCanvas.className = 'sstv-preview';
+  const labRxMeta = el('div', 'sstv-diag');
+  labRxMeta.textContent = '—';
+  labRxCard.append(labRxCanvas, labRxMeta);
+  labGrid.append(labSrcCard, labTxCard, labRxCard);
+
+  const labGrid2 = el('div', 'sstv-grid-2');
+  const labDiffCard = el('div', 'sstv-card');
+  labDiffCard.appendChild(h3('DIFFERENCE (vs normalized)'));
+  const labDiffCanvas = el('canvas');
+  labDiffCanvas.width = 320;
+  labDiffCanvas.height = 256;
+  labDiffCanvas.className = 'sstv-preview';
+  const diffControls = el('div', 'sstv-diff-controls');
+  const diffLabel = el('span');
+  diffLabel.textContent = 'Gain';
+  const diffRange = el('input');
+  diffRange.type = 'range';
+  diffRange.min = '1';
+  diffRange.max = '16';
+  diffRange.value = '4';
+  const diffVal = el('span');
+  diffVal.textContent = '4×';
+  diffRange.addEventListener('input', () => {
+    diffGain = Number(diffRange.value) || 4;
+    diffVal.textContent = diffGain + '×';
+    if (lastNormalized && lastDecodedImage) {
+      drawImageData(labDiffCanvas, differenceHeatmap(lastNormalized, lastDecodedImage, diffGain));
+    }
   });
-  tabRx.addEventListener('click', () => {
-    tabRx.classList.add('active');
-    tabTx.classList.remove('active');
-    rx.hidden = false;
-    tx.hidden = true;
+  diffControls.append(diffLabel, diffRange, diffVal);
+  labDiffCard.append(labDiffCanvas, diffControls);
+
+  const labMetCard = el('div', 'sstv-card');
+  labMetCard.appendChild(h3('METRICS'));
+  const labMetrics = el('div', 'sstv-metrics');
+  labMetrics.innerHTML = '<span>MAE</span><b>—</b><span>PSNR</span><b>—</b><span>SSIM</span><b>—</b><span>MAE R/G/B</span><b>—</b><span>Lines</span><b>—</b><span>Sync</span><b>—</b>';
+  const runLabBtn = btn('▶ FIDELITY ROUND-TRIP');
+  runLabBtn.classList.add('primary');
+  const labAct = el('div', 'sstv-actions');
+  labAct.append(runLabBtn);
+  const labDiag = el('div', 'sstv-diag');
+  labDiag.textContent = 'Compares decoded image to the normalized transmission source (not the raw upload).';
+  labMetCard.append(labMetrics, labAct, labDiag);
+  labGrid2.append(labDiffCard, labMetCard);
+  lab.append(labGrid, labGrid2);
+
+  function setMetricsUI(m, decoded) {
+    const cells = [
+      ['MAE', m.mae.toFixed(2)],
+      ['PSNR', m.psnr.toFixed(1) + ' dB'],
+      ['SSIM', m.ssim.toFixed(3)],
+      ['MAE R/G/B', m.maeR.toFixed(1) + ' / ' + m.maeG.toFixed(1) + ' / ' + m.maeB.toFixed(1)],
+      ['Lines', decoded.linesDecoded + '/' + decoded.expectedLines],
+      ['Sync', decoded.syncScore.toFixed(2)],
+    ];
+    labMetrics.innerHTML = '';
+    for (const [k, v] of cells) {
+      const s = el('span');
+      s.textContent = k;
+      const b = el('b');
+      b.textContent = v;
+      labMetrics.append(s, b);
+    }
+  }
+
+  runLabBtn.addEventListener('click', async () => {
+    try {
+      setBusy(true, 'FIDELITY');
+      runLabBtn.disabled = true;
+      const modeId = modeSel.value;
+      const mode = getMode(modeId) || listEncodableModes().find((x) => x.id === modeId);
+      const fit = labFitSel.value || 'stretch';
+      const src = sourceImage || canvasToImage(txCanvas);
+      if (!sourceImage) sourceImage = src;
+      const normalized = normalizeImage(src, mode.width, mode.height, { fit });
+      lastNormalized = normalized;
+      drawImageData(labSrcCanvas, normalized);
+      drawImageData(txCanvas, normalized);
+      labSrcMeta.textContent = ['mode ' + mode.id + ' · ' + mode.width + '×' + mode.height, 'fit ' + fit, 'src ' + (src.width || '?') + '×' + (src.height || '?')].join('\n');
+
+      const encoded = encodeImageToWav(normalized, modeId, {
+        sampleRate: Number(srSel.value) || 48000,
+        fit,
+        onProgress: (p) => { progressBar.style.width = Math.round(p * 100) + '%'; },
+      });
+      lastWav = encoded.wav;
+      lastSr = encoded.sampleRate;
+      lastSamples = decodeWavPcm16(encoded.wav).samples;
+      drawWaveform(labWave, lastSamples);
+      drawWaveform(waveCanvas, lastSamples);
+      labTxMeta.textContent = ['VIS ' + encoded.visCode + ' · sr ' + encoded.sampleRate, 'duration ' + (encoded.durationMs / 1000).toFixed(1) + 's', 'samples ' + encoded.sampleCount, 'wav ' + encoded.wav.byteLength + ' bytes'].join('\n');
+
+      const decoded = decodeAudio(encoded.wav, { modeHint: modeId });
+      lastDecodedImage = decoded.image;
+      drawImageData(labRxCanvas, decoded.image);
+      drawImageData(rxCanvas, decoded.image);
+      lastPng = await imageToPngBytes(decoded.image);
+      dlPng.disabled = !lastPng;
+      labRxMeta.textContent = ['decoder ' + (decoded.diagnostics?.decoder || decoded.mode), 'lines ' + decoded.linesDecoded + '/' + decoded.expectedLines, 'sync ' + decoded.syncScore.toFixed(2), decoded.diagnostics?.note || ''].join('\n');
+
+      const metrics = computeFidelityMetrics(normalized, decoded.image);
+      lastMetrics = metrics;
+      setMetricsUI(metrics, decoded);
+      drawImageData(labDiffCanvas, differenceHeatmap(normalized, decoded.image, diffGain));
+      labDiag.textContent = ['Round-trip complete (clean digital path via WAV).', 'MAE ' + metrics.mae.toFixed(2) + ' · PSNR ' + metrics.psnr.toFixed(1) + ' · SSIM ' + metrics.ssim.toFixed(3), 'Difference uses normalized transmission source.'].join('\n');
+      setStatus('Fidelity round-trip complete');
+      playBtn.disabled = false;
+      dlWav.disabled = false;
+    } catch (e) {
+      setErr(String(e.message || e));
+      labDiag.textContent = String(e.message || e);
+    } finally {
+      runLabBtn.disabled = false;
+      setBusy(false);
+    }
   });
+
+  const note = el('div', 'sstv-note');
+  note.textContent = 'TX/RX use browser audio only — not radio. Mic needs HTTPS or localhost. FIDELITY compares reconstruction to the normalized transmission source.';
+  root.append(head, tabs, tx, rx, lab, note);
+
+  function showTab(which) {
+    tabTx.classList.toggle('active', which === 'tx');
+    tabRx.classList.toggle('active', which === 'rx');
+    tabLab.classList.toggle('active', which === 'lab');
+    tx.hidden = which !== 'tx';
+    rx.hidden = which !== 'rx';
+    lab.hidden = which !== 'lab';
+  }
+  tabTx.addEventListener('click', () => showTab('tx'));
+  tabRx.addEventListener('click', () => showTab('rx'));
+  tabLab.addEventListener('click', () => showTab('lab'));
 
   function setBusy(on, label) {
     if (on) {
