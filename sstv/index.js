@@ -39,3 +39,5 @@ export {
   onePoleLagSamples,
 } from './dsp/fm-demod.js';
 export { computeFidelityMetrics, differenceHeatmap } from './dsp/metrics.js';
+export { createAcousticLoopback } from './audio/acoustic-loopback.js';
+export { analyzeSignal, classifyCapture } from './audio/signal-stats.js';
