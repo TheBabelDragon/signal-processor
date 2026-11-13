@@ -1,10 +1,12 @@
 /**
  * Continuous FM demodulator for SSTV.
  *
- * Analytic signal (Hilbert FIR) → phase-difference instantaneous frequency
- * → amplitude-gated one-pole post-filter. delaySamples accounts for Hilbert
- * group delay plus approximate post-filter lag so pixel sampling lines up
- * with the transmission timeline.
+ * Analytic signal: centered (zero-phase) Hilbert FIR for Q, real I taken at the
+ * same sample index — I/Q are time-aligned. Phase-difference instantaneous
+ * frequency, optional amplitude-gated one-pole post-filter.
+ *
+ * delaySamples is measured from a synthetic frequency step when possible;
+ * falls back to a documented Hilbert=0 (aligned) + post-filter lag estimate.
  */
 
 const TWO_PI = Math.PI * 2;
@@ -17,10 +19,21 @@ function lpfCoeff(cutoffHz, sampleRate) {
 }
 
 /** Approximate one-pole lag in samples (63% step response). */
-function onePoleLagSamples(cutoffHz, sampleRate) {
+export function onePoleLagSamples(cutoffHz, sampleRate) {
   const a = lpfCoeff(cutoffHz, sampleRate);
   if (a <= 1e-6) return 0;
   return Math.max(0, Math.round((1 - a) / a));
+}
+
+/**
+ * Suggested post-filter Hz from shortest pixel interval.
+ * τ ≈ 1/(2π f) must be << pixel duration so chroma/pixel edges survive.
+ */
+export function recommendedPostFilterHz(shortestPixelSamples, sampleRate) {
+  if (!shortestPixelSamples || shortestPixelSamples <= 0) return 1200;
+  const targetTau = Math.max(1, shortestPixelSamples * 0.25);
+  const hz = sampleRate / (TWO_PI * targetTau);
+  return Math.max(800, Math.min(4000, Math.round(hz)));
 }
 
 function makeHilbertKernel(length = 31) {
@@ -35,12 +48,12 @@ function makeHilbertKernel(length = 31) {
   for (let i = 0; i < n; i++) {
     h[i] *= 0.54 - 0.46 * Math.cos((TWO_PI * i) / (n - 1));
   }
-  return { h, delay: mid };
+  return { h, mid };
 }
 
 const HILBERT = makeHilbertKernel(31);
 
-function firFilter(input, kernel) {
+function firFilterCentered(input, kernel) {
   const n = input.length;
   const m = kernel.length;
   const mid = (m - 1) >> 1;
@@ -59,7 +72,7 @@ function firFilter(input, kernel) {
 export function demodulateFM(samples, sampleRate, opts = {}) {
   const n = samples.length;
   const preHz = opts.preFilterHz ?? 2800;
-  const postHz = opts.postFilterHz ?? 700;
+  const postHz = opts.postFilterHz ?? 1200;
   const minAmp = opts.minAmp ?? 0.02;
 
   const aPre = lpfCoeff(preHz, sampleRate);
@@ -70,13 +83,8 @@ export function demodulateFM(samples, sampleRate, opts = {}) {
     filtered[i] = y;
   }
 
-  const q = firFilter(filtered, HILBERT.h);
-  const delay = HILBERT.delay;
-  const iSig = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const j = i - delay;
-    iSig[i] = j >= 0 ? filtered[j] : 0;
-  }
+  const q = firFilterCentered(filtered, HILBERT.h);
+  const iSig = filtered;
 
   const freq = new Float32Array(n);
   const amp = new Float32Array(n);
@@ -91,29 +99,73 @@ export function demodulateFM(samples, sampleRate, opts = {}) {
     const cross = prevI * qq - prevQ * ii;
     const dot = prevI * ii + prevQ * qq;
     const dphi = Math.atan2(cross, dot);
-    freq[i] = dphi * srOverTwoPi;
+    freq[i] = -dphi * srOverTwoPi;
     prevI = ii;
     prevQ = qq;
   }
 
-  const aPost = lpfCoeff(postHz, sampleRate);
-  let fy = freq[0] || 1500;
-  for (let i = 0; i < n; i++) {
-    const f = freq[i];
-    if (amp[i] < minAmp || !Number.isFinite(f)) {
-      freq[i] = fy;
-    } else {
-      fy += aPost * (f - fy);
-      freq[i] = fy;
+  if (postHz > 0) {
+    const aPost = lpfCoeff(postHz, sampleRate);
+    let fy = freq[0] || 1500;
+    for (let i = 0; i < n; i++) {
+      const f = freq[i];
+      if (amp[i] < minAmp || !Number.isFinite(f)) {
+        freq[i] = fy;
+      } else {
+        fy += aPost * (f - fy);
+        freq[i] = fy;
+      }
     }
   }
 
-  // Align pixel sampling with transmission time: Hilbert + post-filter lag
-  const postLag = onePoleLagSamples(postHz, sampleRate);
-  // Cap post lag — full 63% lag over-corrects short pixels; use ~half
-  const delaySamples = delay + Math.min(postLag, Math.round(postLag * 0.45));
+  let delaySamples = 0;
+  if (postHz > 0) {
+    const postLag = onePoleLagSamples(postHz, sampleRate);
+    delaySamples = Math.round(postLag * 0.5);
+  }
 
-  return { freq, amp, delaySamples };
+  if (opts.measureDelay) {
+    const measured = measureDemodDelay(sampleRate, postHz, minAmp);
+    if (measured != null) delaySamples = measured;
+  }
+
+  return {
+    freq,
+    amp,
+    delaySamples,
+    postFilterHz: postHz,
+    iqAligned: true,
+  };
+}
+
+export function measureDemodDelay(sampleRate, postFilterHz = 1200, minAmp = 0.02) {
+  const sr = sampleRate;
+  const nPre = Math.round(0.02 * sr);
+  const nPost = Math.round(0.02 * sr);
+  const n = nPre + nPost;
+  const samples = new Float32Array(n);
+  let phase = 0;
+  for (let i = 0; i < n; i++) {
+    const f = i < nPre ? 1500 : 2300;
+    phase += (TWO_PI * f) / sr;
+    if (phase > TWO_PI) phase -= TWO_PI;
+    samples[i] = Math.sin(phase);
+  }
+  const { freq } = demodulateFM(samples, sr, {
+    postFilterHz,
+    minAmp,
+    measureDelay: false,
+  });
+  const target = 1900;
+  let cross = -1;
+  for (let i = nPre; i < n; i++) {
+    if (freq[i] >= target) {
+      cross = i;
+      break;
+    }
+  }
+  if (cross < 0) return null;
+  return cross - nPre;
 }
 
 export function freqToValueTrack(freq) {
@@ -125,7 +177,7 @@ export function freqToValueTrack(freq) {
   return out;
 }
 
-export function samplePixels(values, baseOffset, bounds, method = 'center60') {
+export function samplePixels(values, baseOffset, bounds, method = 'center50') {
   const w = bounds.starts.length;
   const out = new Float32Array(w);
   const n = values.length;
@@ -137,26 +189,16 @@ export function samplePixels(values, baseOffset, bounds, method = 'center60') {
       const c = (a + b) >> 1;
       out[x] = c >= 0 && c < n ? values[c] : 0;
     } else if (method === 'mean') {
-      let sum = 0,
-        cnt = 0;
-      const lo = Math.max(0, a),
-        hi = Math.min(n, b);
-      for (let i = lo; i < hi; i++) {
-        sum += values[i];
-        cnt++;
-      }
+      let sum = 0, cnt = 0;
+      const lo = Math.max(0, a), hi = Math.min(n, b);
+      for (let i = lo; i < hi; i++) { sum += values[i]; cnt++; }
       out[x] = cnt ? sum / cnt : 0;
     } else {
-      // center 50% — slightly less edge bleed into separator than 60%
       const margin = Math.max(0, Math.floor(len * 0.25));
-      let sum = 0,
-        cnt = 0;
+      let sum = 0, cnt = 0;
       const lo = Math.max(0, a + margin);
       const hi = Math.min(n, b - margin);
-      for (let i = lo; i < hi; i++) {
-        sum += values[i];
-        cnt++;
-      }
+      for (let i = lo; i < hi; i++) { sum += values[i]; cnt++; }
       if (!cnt) {
         const c = (a + b) >> 1;
         out[x] = c >= 0 && c < n ? values[c] : 0;
@@ -167,6 +209,17 @@ export function samplePixels(values, baseOffset, bounds, method = 'center60') {
 }
 
 export function demodulateToValues(samples, sampleRate, opts = {}) {
-  const { freq, amp, delaySamples } = demodulateFM(samples, sampleRate, opts);
-  return { values: freqToValueTrack(freq), amp, delaySamples, freq };
+  const { freq, amp, delaySamples, postFilterHz, iqAligned } = demodulateFM(
+    samples,
+    sampleRate,
+    opts
+  );
+  return {
+    values: freqToValueTrack(freq),
+    amp,
+    delaySamples,
+    freq,
+    postFilterHz,
+    iqAligned,
+  };
 }

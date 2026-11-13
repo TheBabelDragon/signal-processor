@@ -1,11 +1,11 @@
 /**
- * Robot 36 decoder — continuous FM demod + absolute boundaries + verified chroma inverse.
+ * Robot 36 decoder — continuous FM demod + absolute boundaries + chroma-preserving filter.
  */
 
 import { ROBOT_36 } from '../modes/mode-definitions.js';
 import { detectVis } from './vis-decoder.js';
 import { buildLinePlan } from '../dsp/sample-timing.js';
-import { demodulateToValues, samplePixels } from '../dsp/fm-demod.js';
+import { demodulateToValues, samplePixels, recommendedPostFilterHz } from '../dsp/fm-demod.js';
 import { acquireFirstSync, findSyncNear, LineTimingTracker } from '../dsp/sync.js';
 import { estimateFreq } from './tone-estimator.js';
 import { robotToRgb } from '../encoder/robot36.js';
@@ -24,9 +24,13 @@ export function decodeRobot36(samples, sampleRate, opts = {}) {
     }
   }
 
-  const { values, delaySamples } = demodulateToValues(samples, sr, {
-    postFilterHz: 700,
+  const chromaPixelSamples = plan.cScanSamples / mode.width;
+  const postHz = opts.postFilterHz ?? recommendedPostFilterHz(chromaPixelSamples, sr);
+
+  const { values, delaySamples, iqAligned } = demodulateToValues(samples, sr, {
+    postFilterHz: postHz,
     minAmp: 0.015,
+    measureDelay: opts.measureDelay ?? true,
   });
 
   const width = mode.width;
@@ -60,14 +64,16 @@ export function decodeRobot36(samples, sampleRate, opts = {}) {
     let lineConf = 0;
     if (sync.score > 0.05) {
       const upd = tracker.update(sync.index, expectedSync, sync.score);
-      pos = sync.index;
+      if (upd.accepted) {
+        pos = sync.index;
+        syncHits++;
+      }
       lineConf = upd.confidence;
-      syncHits++;
     }
 
     let cursor = pos + plan.syncSamples + plan.porchSamples;
 
-    const yVals = samplePixels(values, cursor + delaySamples, plan.yBounds, 'center60');
+    const yVals = samplePixels(values, cursor + delaySamples, plan.yBounds, 'center50');
     for (let x = 0; x < width; x++) Y[y * width + x] = yVals[x];
     cursor += plan.yScanSamples;
 
@@ -75,7 +81,7 @@ export function decodeRobot36(samples, sampleRate, opts = {}) {
     cursor += plan.sepSamples + plan.cPorchSamples;
 
     const isRy = Math.abs(sepEst.freq - 1500) <= Math.abs(sepEst.freq - 2300);
-    const cVals = samplePixels(values, cursor + delaySamples, plan.cBounds, 'center60');
+    const cVals = samplePixels(values, cursor + delaySamples, plan.cBounds, 'center50');
     const plane = isRy ? RY : BY;
     for (let x = 0; x < width; x++) plane[y * width + x] = cVals[x];
     if (isRy) ryPresent[y] = 1;
@@ -115,6 +121,7 @@ export function decodeRobot36(samples, sampleRate, opts = {}) {
     rgba[o + 3] = 255;
   }
 
+  const alignment = tracker.alignmentReport();
   const incomplete = linesDecoded < height;
   return {
     image: { data: rgba, width, height },
@@ -127,13 +134,21 @@ export function decodeRobot36(samples, sampleRate, opts = {}) {
     incomplete,
     sampleRate: sr,
     lineDiagnostics,
+    alignment,
     diagnostics: {
       visConfidence: visInfo?.confidence ?? null,
       decoder: 'robot36_v2',
       demodDelay: delaySamples,
+      postFilterHz: postHz,
+      chromaPixelSamples,
+      iqAligned,
+      geometricallyAligned: alignment.geometricallyAligned,
+      driftPpm: alignment.driftPpm,
       note: incomplete
         ? 'Partial frame — not all scanlines recovered'
-        : 'Full frame recovered (continuous FM demod)',
+        : alignment.geometricallyAligned
+          ? 'Full frame recovered (chroma-preserving demod)'
+          : 'Full frame recovered — geometry confidence low',
     },
   };
 }

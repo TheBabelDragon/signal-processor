@@ -1,5 +1,5 @@
 /**
- * SSTV signal-gen dashboard — TX/RX with START TRANSMIT + START RECEIVE + FIDELITY lab.
+ * SSTV signal-gen dashboard — TX/RX + FIDELITY lab (digital + acoustic loopback).
  */
 import {
   encodeImageToWav,
@@ -15,6 +15,7 @@ import {
 import { createPlayback } from '../audio/playback.js';
 import { createCapture } from '../audio/capture.js';
 import { computeFidelityMetrics, differenceHeatmap } from '../dsp/metrics.js';
+import { createAcousticLoopback } from '../audio/acoustic-loopback.js';
 import { drawWaveform } from './waveform.js';
 import { drawLevelMeter } from './level-meter.js';
 
@@ -23,6 +24,7 @@ export function mountSstvPanel(root) {
 
   const playback = createPlayback();
   const capture = createCapture();
+  const acousticLoop = createAcousticLoopback({ capture, playback });
   let lastSamples = null;
   let lastSr = 48000;
   let lastWav = null;
@@ -100,17 +102,9 @@ export function mountSstvPanel(root) {
         const sr = String(m.audio?.sample_rate || m.sstv.sample_rate_hz);
         if ([...srSel.options].some((o) => o.value === sr)) srSel.value = sr;
       }
-      txDiag.textContent = [
-        'manifest ok · contract v' + m.contract_version,
-        'job ' + m.job_id,
-        'op ' + m.operation + ' · asset ' + (m.asset?.filename || '—'),
-        m.sstv?.mode ? 'mode hint ' + m.sstv.mode : '',
-        'Load the companion PNG with Load image if not already set.',
-      ].filter(Boolean).join('\n');
       setStatus('Manifest imported');
     } catch (e) {
       setErr(String(e.message || e));
-      txDiag.textContent = String(e.message || e);
     }
   });
   const testPat = btn('Test pattern');
@@ -140,15 +134,10 @@ export function mountSstvPanel(root) {
     txCanvas.height = m.height;
     if (sourceImage) {
       const fit = (labFitSel && labFitSel.value) || 'stretch';
-      const norm = normalizeImage(sourceImage, m.width, m.height, { fit });
-      drawImageData(txCanvas, norm);
-    } else {
-      paintTestPattern(txCanvas);
-    }
+      drawImageData(txCanvas, normalizeImage(sourceImage, m.width, m.height, { fit }));
+    } else paintTestPattern(txCanvas);
   }
-  function applyModeCanvas() {
-    paintSourceOntoTx();
-  }
+  function applyModeCanvas() { paintSourceOntoTx(); }
   modeSel.addEventListener('change', applyModeCanvas);
 
   const srField = field('Sample rate');
@@ -197,7 +186,7 @@ export function mountSstvPanel(root) {
       if (!p.playing) { progressRaf = null; return; }
       progressBar.style.width = Math.round(p.fraction * 100) + '%';
       const left = Math.max(0, p.duration - p.elapsed);
-      clock.textContent = 'TX ' + fmtTime(p.elapsed) + ' / ' + fmtTime(p.duration) + '  ·  −' + fmtTime(left);
+      clock.textContent = 'TX ' + fmtTime(p.elapsed) + ' / ' + fmtTime(p.duration);
       badge.textContent = 'TX ' + fmtTime(left);
       badge.className = 'sstv-badge tx';
       progressRaf = requestAnimationFrame(tick);
@@ -208,11 +197,7 @@ export function mountSstvPanel(root) {
   async function runEncode() {
     stopProgressLoop();
     progressBar.style.width = '0%';
-    clock.textContent = 'encoding…';
     playback.stop();
-    transmitting = false;
-    playBtn.disabled = true;
-    stopTxBtn.disabled = true;
     const img = canvasToImage(txCanvas);
     const result = encodeImageToWav(img, modeSel.value, {
       sampleRate: Number(srSel.value) || 48000,
@@ -223,15 +208,10 @@ export function mountSstvPanel(root) {
     lastSamples = decodeWavPcm16(result.wav).samples;
     drawWaveform(waveCanvas, lastSamples);
     progressBar.style.width = '100%';
-    clock.textContent = 'ready · ' + fmtTime(result.durationMs / 1000) + ' frame';
+    clock.textContent = 'ready · ' + fmtTime(result.durationMs / 1000);
     dlWav.disabled = false;
     playBtn.disabled = false;
-    txDiag.textContent = [
-      'mode ' + result.mode + '  VIS ' + result.visCode,
-      result.width + '×' + result.height + '  lines ' + result.lineCount,
-      'sr ' + result.sampleRate + '  duration ' + (result.durationMs / 1000).toFixed(1) + 's',
-      'wav ' + result.wav.byteLength + ' bytes',
-    ].join('\n');
+    txDiag.textContent = 'mode ' + result.mode + ' VIS ' + result.visCode + ' · ' + result.sampleRate + ' Hz';
     return result;
   }
 
@@ -241,8 +221,6 @@ export function mountSstvPanel(root) {
     stopTxBtn.disabled = true;
     startTxBtn.disabled = false;
     encodeBtn.disabled = false;
-    progressBar.style.width = '100%';
-    clock.textContent = 'complete';
     setStatus(msg);
   }
 
@@ -255,14 +233,12 @@ export function mountSstvPanel(root) {
       setBusy(true, 'TX AUDIO');
       transmitting = true;
       stopTxBtn.disabled = false;
-      await playback.play(lastSamples, lastSr, { onEnded: () => onAudioEnded('Transmit complete (audio ended)') });
+      await playback.play(lastSamples, lastSr, { onEnded: () => onAudioEnded('Transmit complete') });
       startProgressLoop();
-      setStatus('Transmitting audio…');
     } catch (e) {
       stopProgressLoop();
       transmitting = false;
       setErr(String(e.message || e));
-      txDiag.textContent = String(e.message || e);
       startTxBtn.disabled = false;
       encodeBtn.disabled = false;
       stopTxBtn.disabled = true;
@@ -277,7 +253,6 @@ export function mountSstvPanel(root) {
     stopTxBtn.disabled = true;
     startTxBtn.disabled = false;
     encodeBtn.disabled = false;
-    clock.textContent = 'stopped';
     setStatus('Transmit stopped');
     setBusy(false);
   }
@@ -292,7 +267,6 @@ export function mountSstvPanel(root) {
       setStatus('Encode complete');
     } catch (e) {
       setErr(String(e.message || e));
-      txDiag.textContent = String(e.message || e);
     } finally {
       setBusy(false);
       startTxBtn.disabled = false;
@@ -300,15 +274,10 @@ export function mountSstvPanel(root) {
   });
   playBtn.addEventListener('click', async () => {
     if (!lastSamples) return;
-    try {
-      transmitting = true;
-      stopTxBtn.disabled = false;
-      await playback.play(lastSamples, lastSr, { onEnded: () => onAudioEnded('Playback ended') });
-      startProgressLoop();
-      setStatus('Playing');
-    } catch (e) {
-      setErr(String(e.message || e));
-    }
+    transmitting = true;
+    stopTxBtn.disabled = false;
+    await playback.play(lastSamples, lastSr, { onEnded: () => onAudioEnded('Playback ended') });
+    startProgressLoop();
   });
   dlWav.addEventListener('click', () => {
     if (lastWav) download(lastWav, 'sstv-' + (modeSel.value || 'out') + '.wav', 'audio/wav');
@@ -336,7 +305,6 @@ export function mountSstvPanel(root) {
     rxModeSel.appendChild(o);
   }
   rxModeField.appendChild(rxModeSel);
-
   const rxLevel = el('canvas');
   rxLevel.width = 440;
   rxLevel.height = 14;
@@ -348,8 +316,7 @@ export function mountSstvPanel(root) {
   rxWave.height = 64;
   rxWave.className = 'sstv-wave';
   const rxDiag = el('div', 'sstv-diag');
-  rxDiag.textContent = 'START RECEIVE: mic (HTTPS/localhost) → STOP & DECODE. Cancel aborts. Or Load WAV.';
-
+  rxDiag.textContent = 'START RECEIVE or Load WAV.';
   const startRxBtn = btn('▶ START RECEIVE');
   startRxBtn.classList.add('primary');
   const stopRxBtn = btn('■ STOP & DECODE');
@@ -370,7 +337,7 @@ export function mountSstvPanel(root) {
       if (!receiving) { levelRaf = null; return; }
       drawLevelMeter(rxLevel, capture.getLevel());
       const elapsed = (performance.now() - rxStartedAt) / 1000;
-      rxClock.textContent = 'RX ' + fmtTime(elapsed) + ' · mic open';
+      rxClock.textContent = 'RX ' + fmtTime(elapsed);
       badge.textContent = 'RX ' + fmtTime(elapsed);
       badge.className = 'sstv-badge rx';
       levelRaf = requestAnimationFrame(tick);
@@ -391,14 +358,12 @@ export function mountSstvPanel(root) {
       cancelRxBtn.disabled = false;
       startLevelLoop();
       setStatus('Receiving mic…');
-      rxDiag.textContent = 'Mic open — STOP & DECODE when done, or Cancel.';
     } catch (e) {
       receiving = false;
       startRxBtn.disabled = false;
       stopRxBtn.disabled = true;
       cancelRxBtn.disabled = true;
       setErr(String(e.message || e));
-      rxDiag.textContent = String(e.message || e);
       setBusy(false);
     }
   }
@@ -416,21 +381,13 @@ export function mountSstvPanel(root) {
       lastWav = encodeWavPcm16Mono(cap.samples, cap.sampleRate);
       drawWaveform(rxWave, lastSamples);
       rxPlay.disabled = lastSamples.length === 0;
-      rxClock.textContent = 'captured ' + fmtTime(cap.durationMs / 1000) + ' @ ' + cap.sampleRate + ' Hz';
       if (!lastSamples.length) throw new Error('No audio captured');
       const hint = rxModeSel.value || undefined;
       const decoded = decodeAudio(lastSamples, { sampleRate: lastSr, modeHint: hint });
       drawImageData(rxCanvas, decoded.image);
       lastPng = await imageToPngBytes(decoded.image);
       dlPng.disabled = !lastPng;
-      rxDiag.textContent = [
-        'mode ' + decoded.mode + '  VIS ' + decoded.visCode,
-        'lines ' + decoded.linesDecoded + '/' + decoded.expectedLines,
-        'sync ' + decoded.syncScore.toFixed(2) + '  incomplete ' + decoded.incomplete,
-        'captured ' + (cap.durationMs / 1000).toFixed(1) + 's @ ' + cap.sampleRate + ' Hz',
-        decoded.diagnostics?.note || '',
-        'Mic path is not RF.',
-      ].join('\n');
+      rxDiag.textContent = 'mode ' + decoded.mode + ' lines ' + decoded.linesDecoded + '/' + decoded.expectedLines;
       setStatus('Decode complete');
     } catch (e) {
       setErr(String(e.message || e));
@@ -449,11 +406,8 @@ export function mountSstvPanel(root) {
     stopRxBtn.disabled = true;
     cancelRxBtn.disabled = true;
     startRxBtn.disabled = false;
-    rxClock.textContent = 'cancelled';
-    drawLevelMeter(rxLevel, 0);
     setStatus('Receive cancelled');
     setBusy(false);
-    rxDiag.textContent = 'Capture cancelled — nothing decoded.';
   }
 
   startRxBtn.addEventListener('click', () => startReceive());
@@ -462,14 +416,6 @@ export function mountSstvPanel(root) {
 
   const loadWav = fileBtn('Load WAV', 'audio/wav,audio/*,.wav', async (file) => {
     try {
-      if (receiving) {
-        stopLevelLoop();
-        capture.stop();
-        receiving = false;
-        stopRxBtn.disabled = true;
-        cancelRxBtn.disabled = true;
-        startRxBtn.disabled = false;
-      }
       setBusy(true, 'DECODING');
       const buf = new Uint8Array(await file.arrayBuffer());
       const pcm = decodeWavPcm16(buf);
@@ -483,16 +429,9 @@ export function mountSstvPanel(root) {
       drawImageData(rxCanvas, decoded.image);
       lastPng = await imageToPngBytes(decoded.image);
       dlPng.disabled = !lastPng;
-      rxDiag.textContent = [
-        'mode ' + decoded.mode + '  VIS ' + decoded.visCode,
-        'lines ' + decoded.linesDecoded + '/' + decoded.expectedLines,
-        'sync ' + decoded.syncScore.toFixed(2) + '  incomplete ' + decoded.incomplete,
-        decoded.diagnostics?.note || '',
-      ].join('\n');
       setStatus('Decode complete');
     } catch (e) {
       setErr(String(e.message || e));
-      rxDiag.textContent = String(e.message || e);
     } finally {
       setBusy(false);
     }
@@ -500,26 +439,14 @@ export function mountSstvPanel(root) {
 
   rxPlay.addEventListener('click', async () => {
     if (!lastSamples) return;
-    try {
-      await playback.play(lastSamples, lastSr, {
-        onEnded: () => { rxStopPlay.disabled = true; setStatus('Playback ended'); },
-      });
-      rxStopPlay.disabled = false;
-      setStatus('Playing');
-    } catch (e) {
-      setErr(String(e.message || e));
-    }
+    await playback.play(lastSamples, lastSr, { onEnded: () => { rxStopPlay.disabled = true; } });
+    rxStopPlay.disabled = false;
   });
-  rxStopPlay.addEventListener('click', () => {
-    playback.stop();
-    rxStopPlay.disabled = true;
-    setStatus('Stopped');
-  });
+  rxStopPlay.addEventListener('click', () => { playback.stop(); rxStopPlay.disabled = true; });
 
   const rxAct = el('div', 'sstv-actions');
   rxAct.append(startRxBtn, stopRxBtn, cancelRxBtn, loadWav, rxPlay, rxStopPlay);
   rxIn.append(rxModeField, rxLevel, rxClock, rxWave, rxAct, rxDiag);
-
   const rxOut = el('div', 'sstv-card');
   rxOut.appendChild(h3('RECONSTRUCTED'));
   const rxCanvas = el('canvas');
@@ -528,16 +455,13 @@ export function mountSstvPanel(root) {
   rxCanvas.className = 'sstv-preview';
   const dlPng = btn('Download PNG');
   dlPng.disabled = true;
-  dlPng.addEventListener('click', () => {
-    if (lastPng) download(lastPng, 'sstv-reconstructed.png', 'image/png');
-  });
+  dlPng.addEventListener('click', () => { if (lastPng) download(lastPng, 'sstv-reconstructed.png', 'image/png'); });
   const rxOutAct = el('div', 'sstv-actions');
   rxOutAct.append(dlPng);
   rxOut.append(rxCanvas, rxOutAct);
   rxGrid.append(rxIn, rxOut);
   rx.appendChild(rxGrid);
 
-  // FIDELITY LAB
   const labGrid = el('div', 'sstv-grid-3');
   const labSrcCard = el('div', 'sstv-card');
   labSrcCard.appendChild(h3('SOURCE · NORMALIZED'));
@@ -546,7 +470,7 @@ export function mountSstvPanel(root) {
   labSrcCanvas.height = 256;
   labSrcCanvas.className = 'sstv-preview';
   labSrcMeta = el('div', 'sstv-diag');
-  labSrcMeta.textContent = 'No source — load image on TRANSMIT or use test pattern.';
+  labSrcMeta.textContent = 'Load image on TRANSMIT or use test pattern.';
   const fitField = field('Aspect fit');
   labFitSel = el('select');
   for (const [v, t] of [['stretch', 'Stretch'], ['contain', 'Contain'], ['cover', 'Cover']]) {
@@ -566,11 +490,11 @@ export function mountSstvPanel(root) {
   labWave.height = 64;
   labWave.className = 'sstv-wave';
   const labTxMeta = el('div', 'sstv-diag');
-  labTxMeta.textContent = 'Run FIDELITY ROUND-TRIP to encode.';
+  labTxMeta.textContent = 'Run DIGITAL or ACOUSTIC.';
   labTxCard.append(labWave, labTxMeta);
 
   const labRxCard = el('div', 'sstv-card');
-  labRxCard.appendChild(h3('RECONSTRUCTION'));
+  labRxCard.appendChild(h3('DIGITAL RECONSTRUCTION'));
   const labRxCanvas = el('canvas');
   labRxCanvas.width = 320;
   labRxCanvas.height = 256;
@@ -582,60 +506,58 @@ export function mountSstvPanel(root) {
 
   const labGrid2 = el('div', 'sstv-grid-2');
   const labDiffCard = el('div', 'sstv-card');
-  labDiffCard.appendChild(h3('DIFFERENCE (vs normalized)'));
+  labDiffCard.appendChild(h3('DIFFERENCE (digital vs normalized)'));
   const labDiffCanvas = el('canvas');
   labDiffCanvas.width = 320;
   labDiffCanvas.height = 256;
   labDiffCanvas.className = 'sstv-preview';
-  const diffControls = el('div', 'sstv-diff-controls');
-  const diffLabel = el('span');
-  diffLabel.textContent = 'Gain';
-  const diffRange = el('input');
-  diffRange.type = 'range';
-  diffRange.min = '1';
-  diffRange.max = '16';
-  diffRange.value = '4';
-  const diffVal = el('span');
-  diffVal.textContent = '4×';
-  diffRange.addEventListener('input', () => {
-    diffGain = Number(diffRange.value) || 4;
-    diffVal.textContent = diffGain + '×';
-    if (lastNormalized && lastDecodedImage) {
-      drawImageData(labDiffCanvas, differenceHeatmap(lastNormalized, lastDecodedImage, diffGain));
-    }
-  });
-  diffControls.append(diffLabel, diffRange, diffVal);
-  labDiffCard.append(labDiffCanvas, diffControls);
+  labDiffCard.append(labDiffCanvas);
 
   const labMetCard = el('div', 'sstv-card');
-  labMetCard.appendChild(h3('METRICS'));
+  labMetCard.appendChild(h3('DIGITAL METRICS'));
   const labMetrics = el('div', 'sstv-metrics');
-  labMetrics.innerHTML = '<span>MAE</span><b>—</b><span>PSNR</span><b>—</b><span>SSIM</span><b>—</b><span>MAE R/G/B</span><b>—</b><span>Lines</span><b>—</b><span>Sync</span><b>—</b>';
-  const runLabBtn = btn('▶ FIDELITY ROUND-TRIP');
+  labMetrics.innerHTML = '<span>MAE</span><b>—</b>';
+  const runLabBtn = btn('▶ DIGITAL ROUND-TRIP');
   runLabBtn.classList.add('primary');
+  const runAcousticBtn = btn('▶ ACOUSTIC LOOPBACK');
   const labAct = el('div', 'sstv-actions');
-  labAct.append(runLabBtn);
+  labAct.append(runLabBtn, runAcousticBtn);
   const labDiag = el('div', 'sstv-diag');
-  labDiag.textContent = 'Compares decoded image to the normalized transmission source (not the raw upload).';
+  labDiag.textContent = 'DIGITAL: WAV path. ACOUSTIC: speaker→mic (no passthrough).';
   labMetCard.append(labMetrics, labAct, labDiag);
   labGrid2.append(labDiffCard, labMetCard);
-  lab.append(labGrid, labGrid2);
+
+  const acGrid = el('div', 'sstv-grid-2');
+  const acCard = el('div', 'sstv-card');
+  acCard.appendChild(h3('ACOUSTIC RECONSTRUCTION'));
+  const acCanvas = el('canvas');
+  acCanvas.width = 320;
+  acCanvas.height = 256;
+  acCanvas.className = 'sstv-preview';
+  const acMeta = el('div', 'sstv-diag');
+  acMeta.textContent = 'Not run.';
+  acCard.append(acCanvas, acMeta);
+  const acMetCard = el('div', 'sstv-card');
+  acMetCard.appendChild(h3('ACOUSTIC vs DIGITAL'));
+  const acMetrics = el('div', 'sstv-metrics');
+  acMetrics.innerHTML = '<span>Path</span><b>—</b>';
+  acMetCard.append(acMetrics);
+  acGrid.append(acCard, acMetCard);
+  lab.append(labGrid, labGrid2, acGrid);
 
   function setMetricsUI(m, decoded) {
     const cells = [
       ['MAE', m.mae.toFixed(2)],
       ['PSNR', m.psnr.toFixed(1) + ' dB'],
-      ['SSIM', m.ssim.toFixed(3)],
-      ['MAE R/G/B', m.maeR.toFixed(1) + ' / ' + m.maeG.toFixed(1) + ' / ' + m.maeB.toFixed(1)],
+      ['Global SSIM', (m.globalSsim ?? m.ssim).toFixed(3)],
+      ['Local SSIM', (m.localSsim ?? m.ssim).toFixed(3)],
       ['Lines', decoded.linesDecoded + '/' + decoded.expectedLines],
       ['Sync', decoded.syncScore.toFixed(2)],
     ];
     labMetrics.innerHTML = '';
     for (const [k, v] of cells) {
-      const s = el('span');
-      s.textContent = k;
-      const b = el('b');
-      b.textContent = v;
+      const s = el('span'); s.textContent = k;
+      const b = el('b'); b.textContent = v;
       labMetrics.append(s, b);
     }
   }
@@ -652,35 +574,21 @@ export function mountSstvPanel(root) {
       const normalized = normalizeImage(src, mode.width, mode.height, { fit });
       lastNormalized = normalized;
       drawImageData(labSrcCanvas, normalized);
-      drawImageData(txCanvas, normalized);
-      labSrcMeta.textContent = ['mode ' + mode.id + ' · ' + mode.width + '×' + mode.height, 'fit ' + fit, 'src ' + (src.width || '?') + '×' + (src.height || '?')].join('\n');
-
-      const encoded = encodeImageToWav(normalized, modeId, {
-        sampleRate: Number(srSel.value) || 48000,
-        fit,
-        onProgress: (p) => { progressBar.style.width = Math.round(p * 100) + '%'; },
-      });
+      const encoded = encodeImageToWav(normalized, modeId, { sampleRate: Number(srSel.value) || 48000, fit });
       lastWav = encoded.wav;
       lastSr = encoded.sampleRate;
       lastSamples = decodeWavPcm16(encoded.wav).samples;
       drawWaveform(labWave, lastSamples);
-      drawWaveform(waveCanvas, lastSamples);
-      labTxMeta.textContent = ['VIS ' + encoded.visCode + ' · sr ' + encoded.sampleRate, 'duration ' + (encoded.durationMs / 1000).toFixed(1) + 's', 'samples ' + encoded.sampleCount, 'wav ' + encoded.wav.byteLength + ' bytes'].join('\n');
-
       const decoded = decodeAudio(encoded.wav, { modeHint: modeId });
       lastDecodedImage = decoded.image;
       drawImageData(labRxCanvas, decoded.image);
-      drawImageData(rxCanvas, decoded.image);
       lastPng = await imageToPngBytes(decoded.image);
       dlPng.disabled = !lastPng;
-      labRxMeta.textContent = ['decoder ' + (decoded.diagnostics?.decoder || decoded.mode), 'lines ' + decoded.linesDecoded + '/' + decoded.expectedLines, 'sync ' + decoded.syncScore.toFixed(2), decoded.diagnostics?.note || ''].join('\n');
-
       const metrics = computeFidelityMetrics(normalized, decoded.image);
-      lastMetrics = metrics;
       setMetricsUI(metrics, decoded);
       drawImageData(labDiffCanvas, differenceHeatmap(normalized, decoded.image, diffGain));
-      labDiag.textContent = ['Round-trip complete (clean digital path via WAV).', 'MAE ' + metrics.mae.toFixed(2) + ' · PSNR ' + metrics.psnr.toFixed(1) + ' · SSIM ' + metrics.ssim.toFixed(3), 'Difference uses normalized transmission source.'].join('\n');
-      setStatus('Fidelity round-trip complete');
+      labDiag.textContent = 'Digital round-trip complete. MAE ' + metrics.mae.toFixed(2);
+      setStatus('Digital fidelity OK');
       playBtn.disabled = false;
       dlWav.disabled = false;
     } catch (e) {
@@ -692,8 +600,89 @@ export function mountSstvPanel(root) {
     }
   });
 
+  runAcousticBtn.addEventListener('click', async () => {
+    try {
+      setBusy(true, 'ACOUSTIC');
+      runAcousticBtn.disabled = true;
+      runLabBtn.disabled = true;
+      const modeId = modeSel.value;
+      const mode = getMode(modeId) || listEncodableModes().find((x) => x.id === modeId);
+      const fit = labFitSel.value || 'stretch';
+      const srcImg = sourceImage || canvasToImage(txCanvas);
+      if (!sourceImage) sourceImage = srcImg;
+      const normalized = normalizeImage(srcImg, mode.width, mode.height, { fit });
+      lastNormalized = normalized;
+      drawImageData(labSrcCanvas, normalized);
+
+      const result = await acousticLoop.run({
+        normalizedImage: normalized,
+        modeId,
+        sampleRateHint: Number(srSel.value) || 48000,
+        fit,
+        preMs: 400,
+        postMs: 600,
+        onStatus: (msg) => { labDiag.textContent = msg; },
+      });
+
+      if (result.cancelled) {
+        labDiag.textContent = 'Acoustic loopback cancelled.';
+        acMeta.textContent = 'cancelled';
+        setStatus('Cancelled');
+        return;
+      }
+
+      const dig = result.digital;
+      lastDecodedImage = dig.decoded.image;
+      lastWav = dig.encoded.wav;
+      lastSamples = decodeWavPcm16(dig.encoded.wav).samples;
+      drawWaveform(labWave, lastSamples);
+      drawImageData(labRxCanvas, dig.decoded.image);
+      setMetricsUI(dig.metrics, dig.decoded);
+      drawImageData(labDiffCanvas, dig.heatmap);
+      labTxMeta.textContent = 'TX sr ' + result.transmissionSampleRate + ' · capture sr ' + result.acoustic.sampleRate + ' ch ' + result.acoustic.channelCount;
+
+      const ac = result.acoustic;
+      if (ac.decoded) {
+        drawImageData(acCanvas, ac.decoded.image);
+        lastPng = await imageToPngBytes(ac.decoded.image);
+        dlPng.disabled = !lastPng;
+      }
+      const st = ac.stats;
+      acMeta.textContent = [
+        'status ' + ac.decodeStatus,
+        'sr ' + ac.sampleRate + ' Hz · ch ' + ac.channelCount,
+        'rms ' + st.rms.toFixed(4) + ' · peak ' + st.peak.toFixed(3),
+        'clip ' + st.clippingPercent.toFixed(2) + '%',
+      ].join('\n');
+
+      acMetrics.innerHTML = '';
+      for (const [k, v] of [
+        ['Digital MAE', dig.metrics.mae.toFixed(2)],
+        ['Acoustic MAE', ac.metrics ? ac.metrics.mae.toFixed(2) : '—'],
+        ['Δ path MAE', result.comparison.pathMaeDelta != null ? result.comparison.pathMaeDelta.toFixed(2) : '—'],
+        ['Input RMS', st.rms.toFixed(4)],
+      ]) {
+        const s = el('span'); s.textContent = k;
+        const b = el('b'); b.textContent = v;
+        acMetrics.append(s, b);
+      }
+      if (ac.wav) { lastWav = ac.wav; dlWav.disabled = false; }
+      labDiag.textContent = 'Acoustic finished · Digital MAE ' + dig.metrics.mae.toFixed(2) + (ac.metrics ? ' · Acoustic MAE ' + ac.metrics.mae.toFixed(2) : '');
+      setStatus(ac.decodeStatus === 'decoded' ? 'Acoustic OK' : 'Acoustic finished');
+    } catch (e) {
+      try { acousticLoop.cancel(); } catch (_) {}
+      setErr(String(e.message || e));
+      labDiag.textContent = String(e.message || e);
+      acMeta.textContent = String(e.message || e);
+    } finally {
+      runAcousticBtn.disabled = false;
+      runLabBtn.disabled = false;
+      setBusy(false);
+    }
+  });
+
   const note = el('div', 'sstv-note');
-  note.textContent = 'TX/RX use browser audio only — not radio. Mic needs HTTPS or localhost. FIDELITY compares reconstruction to the normalized transmission source.';
+  note.textContent = 'Digital = buffer path. Acoustic = speaker→mic (muted, no feedback). Not RF.';
   root.append(head, tabs, tx, rx, lab, note);
 
   function showTab(which) {
@@ -711,9 +700,7 @@ export function mountSstvPanel(root) {
   function setBusy(on, label) {
     if (on) {
       badge.textContent = label || 'BUSY';
-      if (label === 'TX AUDIO') badge.className = 'sstv-badge tx';
-      else if (String(label || '').startsWith('RX')) badge.className = 'sstv-badge rx';
-      else badge.className = 'sstv-badge busy';
+      badge.className = label === 'TX AUDIO' ? 'sstv-badge tx' : (label === 'ACOUSTIC' || String(label).startsWith('RX') ? 'sstv-badge rx' : 'sstv-badge busy');
     } else if (!transmitting && !receiving) {
       badge.textContent = 'IDLE';
       badge.className = 'sstv-badge';
@@ -722,12 +709,7 @@ export function mountSstvPanel(root) {
     encodeBtn.disabled = (on && !transmitting) || receiving;
   }
   function setStatus(msg) {
-    if (transmitting) badge.className = 'sstv-badge tx';
-    else if (receiving) badge.className = 'sstv-badge rx';
-    else {
-      badge.textContent = 'OK';
-      badge.className = 'sstv-badge ok';
-    }
+    if (!transmitting && !receiving) { badge.textContent = 'OK'; badge.className = 'sstv-badge ok'; }
     badge.title = msg;
   }
   function setErr(msg) {
@@ -765,10 +747,6 @@ export function mountSstvPanel(root) {
     input.hidden = true;
     lab.appendChild(input);
     lab.style.display = 'inline-flex';
-    lab.style.alignItems = 'center';
-    lab.style.padding = '10px 14px';
-    lab.style.borderRadius = '8px';
-    lab.style.border = '1px solid var(--line, #2a3340)';
     lab.style.cursor = 'pointer';
     input.addEventListener('change', async () => {
       const f = input.files?.[0];
@@ -785,9 +763,6 @@ export function mountSstvPanel(root) {
       ctx.fillStyle = cols[i];
       ctx.fillRect(i * cw, 0, cw + 1, canvas.height);
     }
-    ctx.fillStyle = '#fff';
-    ctx.font = '14px monospace';
-    ctx.fillText('SSTV test', 12, 24);
   }
   function canvasToImage(canvas) {
     const id = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);

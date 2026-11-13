@@ -29,5 +29,15 @@ export {
   synthesizeScanFromBounds,
   synthesizeToneSamples,
 } from './dsp/sample-timing.js';
-export { demodulateFM, demodulateToValues, samplePixels, freqToValueTrack } from './dsp/fm-demod.js';
+export {
+  demodulateFM,
+  demodulateToValues,
+  samplePixels,
+  freqToValueTrack,
+  measureDemodDelay,
+  recommendedPostFilterHz,
+  onePoleLagSamples,
+} from './dsp/fm-demod.js';
 export { computeFidelityMetrics, differenceHeatmap } from './dsp/metrics.js';
+export { createAcousticLoopback } from './audio/acoustic-loopback.js';
+export { analyzeSignal, classifyCapture } from './audio/signal-stats.js';
