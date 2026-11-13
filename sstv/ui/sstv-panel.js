@@ -1,5 +1,5 @@
 /**
- * SSTV signal-gen dashboard — TX/RX with START TRANSMIT + START RECEIVE + FIDELITY lab.
+ * SSTV signal-gen dashboard — TX/RX + FIDELITY lab (digital + acoustic loopback).
  */
 import {
   encodeImageToWav,
@@ -566,11 +566,11 @@ export function mountSstvPanel(root) {
   labWave.height = 64;
   labWave.className = 'sstv-wave';
   const labTxMeta = el('div', 'sstv-diag');
-  labTxMeta.textContent = 'Run FIDELITY ROUND-TRIP to encode.';
+  labTxMeta.textContent = 'Run DIGITAL or ACOUSTIC to encode.';
   labTxCard.append(labWave, labTxMeta);
 
   const labRxCard = el('div', 'sstv-card');
-  labRxCard.appendChild(h3('RECONSTRUCTION'));
+  labRxCard.appendChild(h3('DIGITAL RECONSTRUCTION'));
   const labRxCanvas = el('canvas');
   labRxCanvas.width = 320;
   labRxCanvas.height = 256;
@@ -610,22 +610,42 @@ export function mountSstvPanel(root) {
   const labMetCard = el('div', 'sstv-card');
   labMetCard.appendChild(h3('METRICS'));
   const labMetrics = el('div', 'sstv-metrics');
-  labMetrics.innerHTML = '<span>MAE</span><b>—</b><span>PSNR</span><b>—</b><span>SSIM</span><b>—</b><span>MAE R/G/B</span><b>—</b><span>Lines</span><b>—</b><span>Sync</span><b>—</b>';
-  const runLabBtn = btn('▶ FIDELITY ROUND-TRIP');
+  labMetrics.innerHTML = '<span>MAE</span><b>—</b><span>PSNR</span><b>—</b><span>SSIM</span><b>—</b>';
+  const runLabBtn = btn('▶ DIGITAL ROUND-TRIP');
   runLabBtn.classList.add('primary');
+  const runAcousticBtn = btn('▶ ACOUSTIC LOOPBACK');
   const labAct = el('div', 'sstv-actions');
-  labAct.append(runLabBtn);
+  labAct.append(runLabBtn, runAcousticBtn);
   const labDiag = el('div', 'sstv-diag');
-  labDiag.textContent = 'Compares decoded image to the normalized transmission source (not the raw upload).';
+  labDiag.textContent = 'DIGITAL: encode→WAV→decode. ACOUSTIC: encode→speaker→mic→decode (same device; avoid headphones).';
   labMetCard.append(labMetrics, labAct, labDiag);
   labGrid2.append(labDiffCard, labMetCard);
-  lab.append(labGrid, labGrid2);
+
+  const acGrid = el('div', 'sstv-grid-2');
+  const acCard = el('div', 'sstv-card');
+  acCard.appendChild(h3('ACOUSTIC RECONSTRUCTION'));
+  const acCanvas = el('canvas');
+  acCanvas.width = 320;
+  acCanvas.height = 256;
+  acCanvas.className = 'sstv-preview';
+  const acMeta = el('div', 'sstv-diag');
+  acMeta.textContent = 'Not run.';
+  acCard.append(acCanvas, acMeta);
+  const acMetCard = el('div', 'sstv-card');
+  acMetCard.appendChild(h3('ACOUSTIC vs DIGITAL'));
+  const acMetrics = el('div', 'sstv-metrics');
+  acMetrics.innerHTML = '<span>Path</span><b>—</b>';
+  acMetCard.append(acMetrics);
+  acGrid.append(acCard, acMetCard);
+
+  lab.append(labGrid, labGrid2, acGrid);
 
   function setMetricsUI(m, decoded) {
     const cells = [
       ['MAE', m.mae.toFixed(2)],
       ['PSNR', m.psnr.toFixed(1) + ' dB'],
-      ['SSIM', m.ssim.toFixed(3)],
+      ['SSIM', (m.globalSsim ?? m.ssim).toFixed(3)],
+      ['Local SSIM', (m.localSsim ?? m.ssim).toFixed(3)],
       ['MAE R/G/B', m.maeR.toFixed(1) + ' / ' + m.maeG.toFixed(1) + ' / ' + m.maeB.toFixed(1)],
       ['Lines', decoded.linesDecoded + '/' + decoded.expectedLines],
       ['Sync', decoded.syncScore.toFixed(2)],
@@ -653,7 +673,7 @@ export function mountSstvPanel(root) {
       lastNormalized = normalized;
       drawImageData(labSrcCanvas, normalized);
       drawImageData(txCanvas, normalized);
-      labSrcMeta.textContent = ['mode ' + mode.id + ' · ' + mode.width + '×' + mode.height, 'fit ' + fit, 'src ' + (src.width || '?') + '×' + (src.height || '?')].join('\n');
+      labSrcMeta.textContent = ['mode ' + mode.id + ' · ' + mode.width + '×' + mode.height, 'fit ' + fit].join('\n');
 
       const encoded = encodeImageToWav(normalized, modeId, {
         sampleRate: Number(srSel.value) || 48000,
@@ -665,7 +685,7 @@ export function mountSstvPanel(root) {
       lastSamples = decodeWavPcm16(encoded.wav).samples;
       drawWaveform(labWave, lastSamples);
       drawWaveform(waveCanvas, lastSamples);
-      labTxMeta.textContent = ['VIS ' + encoded.visCode + ' · sr ' + encoded.sampleRate, 'duration ' + (encoded.durationMs / 1000).toFixed(1) + 's', 'samples ' + encoded.sampleCount, 'wav ' + encoded.wav.byteLength + ' bytes'].join('\n');
+      labTxMeta.textContent = ['VIS ' + encoded.visCode + ' · sr ' + encoded.sampleRate, 'duration ' + (encoded.durationMs / 1000).toFixed(1) + 's'].join('\n');
 
       const decoded = decodeAudio(encoded.wav, { modeHint: modeId });
       lastDecodedImage = decoded.image;
@@ -679,7 +699,7 @@ export function mountSstvPanel(root) {
       lastMetrics = metrics;
       setMetricsUI(metrics, decoded);
       drawImageData(labDiffCanvas, differenceHeatmap(normalized, decoded.image, diffGain));
-      labDiag.textContent = ['Round-trip complete (clean digital path via WAV).', 'MAE ' + metrics.mae.toFixed(2) + ' · PSNR ' + metrics.psnr.toFixed(1) + ' · SSIM ' + metrics.ssim.toFixed(3), 'Difference uses normalized transmission source.'].join('\n');
+      labDiag.textContent = ['Digital round-trip complete.', 'MAE ' + metrics.mae.toFixed(2) + ' · PSNR ' + metrics.psnr.toFixed(1)].join('\n');
       setStatus('Fidelity round-trip complete');
       playBtn.disabled = false;
       dlWav.disabled = false;
@@ -692,8 +712,98 @@ export function mountSstvPanel(root) {
     }
   });
 
+  runAcousticBtn.addEventListener('click', async () => {
+    try {
+      setBusy(true, 'ACOUSTIC');
+      runAcousticBtn.disabled = true;
+      runLabBtn.disabled = true;
+      const modeId = modeSel.value;
+      const mode = getMode(modeId) || listEncodableModes().find((x) => x.id === modeId);
+      const fit = labFitSel.value || 'stretch';
+      const srcImg = sourceImage || canvasToImage(txCanvas);
+      if (!sourceImage) sourceImage = srcImg;
+      const normalized = normalizeImage(srcImg, mode.width, mode.height, { fit });
+      lastNormalized = normalized;
+      drawImageData(labSrcCanvas, normalized);
+
+      const encoded = encodeImageToWav(normalized, modeId, {
+        sampleRate: Number(srSel.value) || 48000,
+        fit,
+      });
+      lastWav = encoded.wav;
+      lastSr = encoded.sampleRate;
+      lastSamples = decodeWavPcm16(encoded.wav).samples;
+      drawWaveform(labWave, lastSamples);
+      const digital = decodeAudio(encoded.wav, { modeHint: modeId });
+      lastDecodedImage = digital.image;
+      drawImageData(labRxCanvas, digital.image);
+      const digMetrics = computeFidelityMetrics(normalized, digital.image);
+      lastMetrics = digMetrics;
+      setMetricsUI(digMetrics, digital);
+      drawImageData(labDiffCanvas, differenceHeatmap(normalized, digital.image, diffGain));
+
+      const preMs = 400;
+      const postMs = 600;
+      labDiag.textContent = 'Opening mic for acoustic loopback…';
+      await capture.start({ sampleRateHint: lastSr });
+      await new Promise((r) => setTimeout(r, preMs));
+      labDiag.textContent = 'Playing SSTV through speaker while recording…';
+      await playback.play(lastSamples, lastSr, {});
+      const durMs = (lastSamples.length / lastSr) * 1000;
+      await new Promise((r) => setTimeout(r, durMs + postMs));
+      const cap = capture.stop();
+      const acDecoded = decodeAudio(cap.samples, { sampleRate: cap.sampleRate, modeHint: modeId });
+      drawImageData(acCanvas, acDecoded.image);
+      const acMet = computeFidelityMetrics(normalized, acDecoded.image);
+      const digVsAc = computeFidelityMetrics(digital.image, acDecoded.image);
+
+      let energy = 0;
+      for (let i = 0; i < cap.samples.length; i++) energy += cap.samples[i] * cap.samples[i];
+      const rms = Math.sqrt(energy / Math.max(1, cap.samples.length));
+
+      acMeta.textContent = [
+        'lines ' + acDecoded.linesDecoded + '/' + acDecoded.expectedLines,
+        'sync ' + acDecoded.syncScore.toFixed(2),
+        'sr ' + cap.sampleRate + ' · rms ' + rms.toFixed(4),
+        'duration ' + (cap.durationMs / 1000).toFixed(1) + 's',
+      ].join('\n');
+
+      acMetrics.innerHTML = '';
+      const rows = [
+        ['Digital MAE', digMetrics.mae.toFixed(2)],
+        ['Acoustic MAE', acMet.mae.toFixed(2)],
+        ['Δ path MAE', Math.abs(acMet.mae - digMetrics.mae).toFixed(2)],
+        ['Acoustic PSNR', acMet.psnr.toFixed(1) + ' dB'],
+        ['Acoustic SSIM', (acMet.globalSsim ?? acMet.ssim).toFixed(3)],
+        ['Dig↔Ac MAE', digVsAc.mae.toFixed(2)],
+        ['Ac lines', acDecoded.linesDecoded + '/' + acDecoded.expectedLines],
+        ['Input RMS', rms.toFixed(4)],
+      ];
+      for (const [k, v] of rows) {
+        const s = el('span'); s.textContent = k;
+        const b = el('b'); b.textContent = v;
+        acMetrics.append(s, b);
+      }
+      labDiag.textContent = [
+        'Acoustic loopback complete (speaker→air→mic).',
+        'Digital MAE ' + digMetrics.mae.toFixed(2) + ' · Acoustic MAE ' + acMet.mae.toFixed(2),
+        'Use device speaker (not headphones) for a meaningful room path.',
+      ].join('\n');
+      setStatus('Acoustic loopback complete');
+    } catch (e) {
+      try { capture.stop(); } catch (_) {}
+      setErr(String(e.message || e));
+      labDiag.textContent = String(e.message || e);
+      acMeta.textContent = String(e.message || e);
+    } finally {
+      runAcousticBtn.disabled = false;
+      runLabBtn.disabled = false;
+      setBusy(false);
+    }
+  });
+
   const note = el('div', 'sstv-note');
-  note.textContent = 'TX/RX use browser audio only — not radio. Mic needs HTTPS or localhost. FIDELITY compares reconstruction to the normalized transmission source.';
+  note.textContent = 'TX/RX use browser audio only — not radio. FIDELITY digital is buffer-only; ACOUSTIC plays the speaker and records the mic (no live passthrough).';
   root.append(head, tabs, tx, rx, lab, note);
 
   function showTab(which) {
@@ -712,7 +822,7 @@ export function mountSstvPanel(root) {
     if (on) {
       badge.textContent = label || 'BUSY';
       if (label === 'TX AUDIO') badge.className = 'sstv-badge tx';
-      else if (String(label || '').startsWith('RX')) badge.className = 'sstv-badge rx';
+      else if (String(label || '').startsWith('RX') || label === 'ACOUSTIC') badge.className = 'sstv-badge rx';
       else badge.className = 'sstv-badge busy';
     } else if (!transmitting && !receiving) {
       badge.textContent = 'IDLE';
