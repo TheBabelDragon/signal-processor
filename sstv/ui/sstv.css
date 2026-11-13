@@ -202,3 +202,46 @@
   .sstv-grid { grid-template-columns: 1fr; }
   .sstv-preview { max-height: 180px; }
 }
+
+/* Fidelity lab */
+.sstv-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.sstv-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+.sstv-metrics {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  color: var(--phosphor, #7dffb3);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+.sstv-metrics span {
+  color: var(--text-dim, #8b97a8);
+}
+.sstv-diff-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim, #8b97a8);
+}
+.sstv-diff-controls input[type="range"] {
+  flex: 1;
+  min-width: 80px;
+}
+@media (max-width: 900px) {
+  .sstv-grid-3 { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .sstv-grid-2 { grid-template-columns: 1fr; }
+  .sstv-metrics { grid-template-columns: 1fr; }
+}
