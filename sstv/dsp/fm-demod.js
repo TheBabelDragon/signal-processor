@@ -1,5 +1,10 @@
 /**
  * Continuous FM demodulator for SSTV.
+ *
+ * Analytic signal (Hilbert FIR) → phase-difference instantaneous frequency
+ * → amplitude-gated one-pole post-filter. delaySamples accounts for Hilbert
+ * group delay plus approximate post-filter lag so pixel sampling lines up
+ * with the transmission timeline.
  */
 
 const TWO_PI = Math.PI * 2;
@@ -9,6 +14,13 @@ const SPAN_HZ = 800;
 function lpfCoeff(cutoffHz, sampleRate) {
   const x = Math.exp((-2 * Math.PI * cutoffHz) / sampleRate);
   return 1 - x;
+}
+
+/** Approximate one-pole lag in samples (63% step response). */
+function onePoleLagSamples(cutoffHz, sampleRate) {
+  const a = lpfCoeff(cutoffHz, sampleRate);
+  if (a <= 1e-6) return 0;
+  return Math.max(0, Math.round((1 - a) / a));
 }
 
 function makeHilbertKernel(length = 31) {
@@ -47,7 +59,7 @@ function firFilter(input, kernel) {
 export function demodulateFM(samples, sampleRate, opts = {}) {
   const n = samples.length;
   const preHz = opts.preFilterHz ?? 2800;
-  const postHz = opts.postFilterHz ?? 600;
+  const postHz = opts.postFilterHz ?? 700;
   const minAmp = opts.minAmp ?? 0.02;
 
   const aPre = lpfCoeff(preHz, sampleRate);
@@ -96,7 +108,12 @@ export function demodulateFM(samples, sampleRate, opts = {}) {
     }
   }
 
-  return { freq, amp, delaySamples: delay };
+  // Align pixel sampling with transmission time: Hilbert + post-filter lag
+  const postLag = onePoleLagSamples(postHz, sampleRate);
+  // Cap post lag — full 63% lag over-corrects short pixels; use ~half
+  const delaySamples = delay + Math.min(postLag, Math.round(postLag * 0.45));
+
+  return { freq, amp, delaySamples };
 }
 
 export function freqToValueTrack(freq) {
@@ -120,16 +137,26 @@ export function samplePixels(values, baseOffset, bounds, method = 'center60') {
       const c = (a + b) >> 1;
       out[x] = c >= 0 && c < n ? values[c] : 0;
     } else if (method === 'mean') {
-      let sum = 0, cnt = 0;
-      const lo = Math.max(0, a), hi = Math.min(n, b);
-      for (let i = lo; i < hi; i++) { sum += values[i]; cnt++; }
+      let sum = 0,
+        cnt = 0;
+      const lo = Math.max(0, a),
+        hi = Math.min(n, b);
+      for (let i = lo; i < hi; i++) {
+        sum += values[i];
+        cnt++;
+      }
       out[x] = cnt ? sum / cnt : 0;
     } else {
-      const margin = Math.max(0, Math.floor(len * 0.2));
-      let sum = 0, cnt = 0;
+      // center 50% — slightly less edge bleed into separator than 60%
+      const margin = Math.max(0, Math.floor(len * 0.25));
+      let sum = 0,
+        cnt = 0;
       const lo = Math.max(0, a + margin);
       const hi = Math.min(n, b - margin);
-      for (let i = lo; i < hi; i++) { sum += values[i]; cnt++; }
+      for (let i = lo; i < hi; i++) {
+        sum += values[i];
+        cnt++;
+      }
       if (!cnt) {
         const c = (a + b) >> 1;
         out[x] = c >= 0 && c < n ? values[c] : 0;
