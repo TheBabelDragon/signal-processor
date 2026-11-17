@@ -1,0 +1,110 @@
+#quantumRiemannLab, .qrl-panel {
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--phosphor, #b8f0c8);
+  background: var(--panel, #0d1218);
+  border: 1px solid var(--line, #1e2a36);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 14px 0;
+}
+.qrl-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.qrl-title {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: #8cf0c0;
+}
+.qrl-badge {
+  font-size: 10px;
+  color: #6a8a7a;
+  border: 1px solid #2a3a34;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.qrl-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.qrl-tabs button {
+  background: #121a22;
+  border: 1px solid #243040;
+  color: #8ab0a0;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.qrl-tabs button.active {
+  background: #1a2e28;
+  border-color: #3a6a58;
+  color: #9dffc8;
+}
+.qrl-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.qrl-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.qrl-field label {
+  font-size: 10px;
+  color: #6a8a7a;
+}
+.qrl-field input, .qrl-field select {
+  background: #0a1016;
+  border: 1px solid #243040;
+  color: #c8f0d8;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+.qrl-panel button.primary {
+  background: #1a3a30;
+  border: 1px solid #3a7a60;
+  color: #b0ffd0;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+.qrl-status {
+  font-size: 11px;
+  color: #7aaa90;
+  margin-bottom: 8px;
+}
+.qrl-note {
+  font-size: 11px;
+  color: #c0a060;
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.qrl-canvas {
+  width: 100%;
+  max-width: 640px;
+  background: #060a0e;
+  border: 1px solid #1a2830;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+.qrl-readout {
+  font-size: 11px;
+  background: #080c10;
+  border: 1px solid #1a2830;
+  border-radius: 4px;
+  padding: 8px;
+  overflow: auto;
+  max-height: 280px;
+  color: #90c0a8;
+  white-space: pre-wrap;
+}
