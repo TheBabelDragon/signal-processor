@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "spectral_experiment.v1.schema.json",
+  "title": "Spectral Experiment v1",
+  "description": "Versioned experiment record for Quantum Wave / Riemann Spectral Lab. Finite numerical evidence is never a formal proof of RH.",
+  "type": "object",
+  "required": [
+    "schema",
+    "experiment_id",
+    "experiment_type",
+    "engine_version",
+    "parameters",
+    "numerical_method",
+    "timestamp"
+  ],
+  "properties": {
+    "schema": { "const": "spectral_experiment.v1" },
+    "experiment_id": { "type": "string" },
+    "experiment_type": {
+      "type": "string",
+      "enum": ["quantum_wave_packet", "riemann_zeros", "spectral_comparison"]
+    },
+    "engine_version": { "type": "string" },
+    "parameters": { "type": "object" },
+    "units": { "type": "string" },
+    "random_seed": { "type": "number" },
+    "input_identity": { "type": ["string", "null"] },
+    "numerical_method": { "type": "string" },
+    "output_summary": { "type": "object" },
+    "measurements": { "type": "object" },
+    "validation": { "type": "object" },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "datasets": { "type": "object" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": true
+}
