@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css?v=20260919a">
 <link rel="stylesheet" href="acoustic-probe.css?v=20261102a">
 <link rel="stylesheet" href="sstv/ui/sstv.css?v=20261109d">
+<link rel="stylesheet" href="spectral/lab.css?v=20261117a">
 </head>
 <body>
 <div class="wrap">
@@ -69,6 +70,8 @@
     <div class="ap-status" id="apStatus">idle</div>
     <div class="ap-note">Independent of neurofeedback / Echo reward. Synthetic tests never claim physical detection. Single-device latency is not calibrated distance. See ACOUSTIC_PROBE.md.</div>
   </div>
+
+  <div id="quantumRiemannLabHost"></div>
 
   <div class="panel">
     <div id="dropzone">
@@ -264,6 +267,12 @@
 <script type="module">
 import { mountSstvPanel } from "./sstv/ui/sstv-panel.js?v=20261109d";
 mountSstvPanel(document.getElementById("sstvPanel"));
+</script>
+<script src="spectral/lab-ui.js?v=20261117a"></script>
+<script>
+if (window.mountQuantumRiemannLab) {
+  mountQuantumRiemannLab(document.getElementById("quantumRiemannLabHost"));
+}
 </script>
 </body>
 </html>
