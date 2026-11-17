@@ -62,3 +62,22 @@ capabilities:
       - SignalProducerPacket
     safe: true
     entry: SignalProducer.packet
+  - name: spectral-experiment
+    description: Run Quantum Wave / Riemann Spectral numerical experiments and export spectral_experiment.v1 records. Offline JSON exchange with Throne Room. Finite numerical evidence is never a formal RH proof.
+    inputs:
+      - name: experiment_config
+        schema: spectral_experiment.v1.schema.json
+    outputs:
+      - name: SpectralExperiment
+        schema: spectral_experiment.v1.schema.json
+    operation: compute
+    side_effects: []
+    requires:
+      - spectral/quantum-wave.js
+      - spectral/riemann.js
+      - spectral/experiment.js
+    produces:
+      - SpectralExperiment
+      - numerical datasets
+    safe: true
+    entry: spectral/experiment.js / QUANTUM RIEMANN LAB panel
